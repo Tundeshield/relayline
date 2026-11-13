@@ -10,6 +10,8 @@ import { summarize, filterMessages, timeSeries, isAttempted } from '../../servic
 import { CAMPAIGN_STATUS, CHANNEL_LABEL } from '../../lib/constants';
 import { fmtNum, fmtDate, relTime, DAY, plural } from '../../lib/util';
 import { useTitle } from '../../lib/hooks';
+import { GoalBox } from '../../components/ai';
+import { MessageCircle, PauseCircle, FileEdit, CalendarClock } from 'lucide-react';
 
 function Delta({ cur, prev, unit = '', invert }) {
   if (prev == null) return null;
@@ -43,6 +45,18 @@ export default function Dashboard() {
   const openConvs = o.conversations.filter((c) => c.status === 'open').length;
   const unread = o.conversations.filter((c) => c.unread).length;
   const hour = new Date().getHours();
+  const waiting = o.conversations.filter((c) => c.status === 'open' && o.conversationMessages.filter((m) => m.conversation_id === c.id && m.direction !== 'note').sort((x, y) => y.created_at - x.created_at)[0]?.direction === 'in').length;
+  const failed7 = o.messages.filter((m) => m.status === 'failed' && m.failed_at >= now - 7 * DAY).length;
+  const pausedErr = o.automations.filter((a) => a.status === 'paused' && a.paused_reason);
+  const drafts = o.campaigns.filter((c) => c.status === 'draft');
+  const nextScheduled = o.campaigns.filter((c) => c.status === 'scheduled').sort((a, b) => a.schedule_at - b.schedule_at)[0];
+  const attention = [
+    waiting && { icon: MessageCircle, tone: 'warn', text: `${waiting} conversation${waiting > 1 ? 's are' : ' is'} waiting for a reply`, to: '/app/inbox', cta: 'Reply' },
+    failed7 && { icon: AlertCircle, tone: 'err', text: `${failed7} message${failed7 > 1 ? 's' : ''} failed to deliver in the last 7 days`, to: '/app/analytics', cta: 'Review' },
+    ...pausedErr.map((a) => ({ icon: PauseCircle, tone: 'warn', text: `Automation “${a.name}” was paused after an error`, to: `/app/automations/${a.id}/history`, cta: 'Fix' })),
+    drafts.length && { icon: FileEdit, tone: 'text-3', text: `${drafts.length} campaign draft${drafts.length > 1 ? 's' : ''} not sent yet`, to: `/app/campaigns/${drafts[0].id}/edit`, cta: 'Finish' },
+    nextScheduled && { icon: CalendarClock, tone: 'accent', text: `“${nextScheduled.name}” is scheduled ${relTime(nextScheduled.schedule_at)}`, to: `/app/campaigns/${nextScheduled.id}`, cta: 'View' },
+  ].filter(Boolean);
   const empty = o.contacts.length === 0;
 
   return (
@@ -50,14 +64,17 @@ export default function Dashboard() {
       <div className="page-head">
         <div><h1>Good {hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening'}, {o.user.name.split(' ')[0]}</h1><p>Here’s what is happening across {o.org.name}’s channels over the last 30 days.</p></div>
         <div className="row wrap">
-          <Link to="/app/campaigns/new" className="btn btn-primary"><Plus />Create campaign</Link>
+          <Link to="/app/campaigns/new" className="btn btn-primary"><Plus />New campaign</Link>
           <Link to="/app/contacts?new=1" className="btn"><UserPlus />Add contact</Link>
-          <Link to="/app/contacts/import" className="btn"><Upload />Import contacts</Link>
-          <Link to="/app/automations/new" className="btn"><Workflow />Create automation</Link>
-          <Link to="/app/inbox" className="btn"><Inbox />Open inbox{unread > 0 && <span className="badge badge-accent" style={{ height: 18 }}>{unread}</span>}</Link>
         </div>
       </div>
 
+      <div style={{ marginBottom: 16 }}><GoalBox /></div>
+      {attention.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}><div className="card-head"><h3>Needs your attention</h3></div><div className="card-body" style={{ paddingTop: 4, paddingBottom: 4 }}>
+          {attention.map((a) => { const I = a.icon; return <Link key={a.to + a.text} to={a.to} className="attention-item"><span className="tl-icon" style={{ color: `var(--${a.tone})` }}><I /></span><span className="grow small">{a.text}</span><span className="btn btn-sm">{a.cta}</span></Link>; })}
+        </div></div>
+      )}
       {empty && <div className="card" style={{ marginBottom: 16 }}><Empty icon={FlaskConical} title="Your workspace is ready" action={<div className="row"><Link to="/app/contacts/import" className="btn btn-primary"><Upload />Import contacts</Link><Link to="/app/contacts?new=1" className="btn"><UserPlus />Add a contact</Link></div>}>Start by adding the people you communicate with. Every chart here fills in from your own activity.</Empty></div>}
 
       <div className="grid-4" style={{ marginBottom: 16 }}>

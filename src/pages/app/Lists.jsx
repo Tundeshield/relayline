@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Plus, ListChecks, Filter, Trash2, Send, UserPlus, Search, X, Pencil, Download } from 'lucide-react';
 import { useOrg, getState, upd } from '../../data/store';
-import { PageHead, Empty, Modal, Field, Badge, Callout, Segmented, useConfirm, useSort } from '../../components/ui';
+import { CONTACT_TABS, PageHead, Empty, Modal, Field, Badge, Callout, Segmented, useConfirm, useSort } from '../../components/ui';
 import { ChannelAvail, ContactStatus } from './shared';
 import { exportContacts } from './Contacts';
 import { listMembers, createList, addToList, removeFromList, SEGMENT_FIELDS, OP_LABEL, evaluateSegment } from '../../services/contacts';
@@ -12,7 +12,7 @@ import { CHANNEL_LABEL } from '../../lib/constants';
 import { useAction, usePerm, useTitle } from '../../lib/hooks';
 
 export default function Lists() {
-  useTitle('Lists & segments');
+  useTitle('Groups');
   const o = useOrg();
   const nav = useNavigate();
   const can = usePerm();
@@ -23,13 +23,13 @@ export default function Lists() {
   const { sorted, Th } = useSort(rows, { key: 'name', dir: 'asc' }, { count: (l) => counts[l.id] });
   return (
     <>
-      <PageHead title="Lists & segments" description="Static lists hold the contacts you add. Segments update automatically as contact data and consent change."
-        actions={<><button className="btn" onClick={() => setCreate('segment')} disabled={!can('contacts.manage')}><Filter />New segment</button><button className="btn btn-primary" onClick={() => setCreate('static')} disabled={!can('contacts.manage')}><Plus />New list</button></>} />
+      <PageHead tabs={CONTACT_TABS} title="Contacts" description="Groups organise contacts for campaigns. Fixed groups contain the people you add; smart groups fill themselves from rules you set."
+        actions={<><button className="btn" onClick={() => setCreate('segment')} disabled={!can('contacts.manage')}><Filter />New smart group</button><button className="btn btn-primary" onClick={() => setCreate('static')} disabled={!can('contacts.manage')}><Plus />New group</button></>} />
       <div className="card">
-        <div className="toolbar"><Segmented value={type} onChange={setType} options={[['all', 'All'], ['static', 'Static lists'], ['segment', 'Segments']]} label="Type" /></div>
-        {sorted.length === 0 ? <Empty icon={ListChecks} title="No lists yet" action={<button className="btn btn-primary" onClick={() => setCreate('static')}><Plus />Create a list</button>}>Group contacts into lists for campaigns, or build segments from rules.</Empty> : (
+        <div className="toolbar"><Segmented value={type} onChange={setType} options={[['all', 'All groups'], ['static', 'Fixed'], ['segment', 'Smart']]} label="Type" /></div>
+        {sorted.length === 0 ? <Empty icon={ListChecks} title="No groups yet" action={<button className="btn btn-primary" onClick={() => setCreate('static')}><Plus />Create a group</button>}>Put contacts into groups (like “Building A Residents”) so you can message them together.</Empty> : (
           <div className="table-wrap"><table className="table"><thead><tr><Th k="name">Name</Th><Th k="type">Type</Th><Th k="count">Contacts</Th><th>Definition</th><Th k="created_at">Created</Th></tr></thead><tbody>
-            {sorted.map((l) => <tr key={l.id} className="clickable" onClick={() => nav(`/app/lists/${l.id}`)}><td><Link to={`/app/lists/${l.id}`} className="strong">{l.name}</Link>{l.description && <div className="faint xs">{l.description}</div>}</td><td><Badge tone={l.type === 'segment' ? 'accent' : 'neutral'}>{l.type === 'segment' ? 'Dynamic segment' : 'Static list'}</Badge></td><td className="strong">{counts[l.id]}</td><td className="muted small" style={{ maxWidth: 360 }}>{l.type === 'segment' ? <RuleSummary rules={l.rules} /> : 'Manually managed'}</td><td className="muted">{fmtDate(l.created_at)}</td></tr>)}
+            {sorted.map((l) => <tr key={l.id} className="clickable" onClick={() => nav(`/app/lists/${l.id}`)}><td><Link to={`/app/lists/${l.id}`} className="strong">{l.name}</Link>{l.description && <div className="faint xs">{l.description}</div>}</td><td><Badge tone={l.type === 'segment' ? 'accent' : 'neutral'}>{l.type === 'segment' ? 'Smart group' : 'Fixed group'}</Badge></td><td className="strong">{counts[l.id]}</td><td className="muted small" style={{ maxWidth: 360 }}>{l.type === 'segment' ? <RuleSummary rules={l.rules} /> : 'People you add'}</td><td className="muted">{fmtDate(l.created_at)}</td></tr>)}
           </tbody></table></div>
         )}
       </div>
@@ -98,21 +98,21 @@ function ListEditor({ type, list, onClose, onSaved }) {
   const incomplete = type === 'segment' && rules.rules.some((r) => { const f = SEGMENT_FIELDS.find((x) => x.key === r.field); return !['is_set', 'is_not_set'].includes(r.op) && f.value !== 'channel' && f.value !== 'status' && (r.value === '' || r.value == null); });
   const save = () => {
     if (!name.trim()) return setErr('Name is required.');
-    if (o.lists.some((l) => l.id !== list?.id && l.name.toLowerCase() === name.trim().toLowerCase())) return setErr('A list or segment with this name already exists.');
+    if (o.lists.some((l) => l.id !== list?.id && l.name.toLowerCase() === name.trim().toLowerCase())) return setErr('A group with this name already exists.');
     if (type === 'segment' && (!rules.rules.length || incomplete)) return setErr('Complete every condition.');
     const saved = run((d, ctx) => {
-      if (list) { upd(d.lists, list.id, { name: name.trim(), description, rules: type === 'segment' ? rules : null }); logActivity(d, ctx, { event_type: 'list.updated', entity_type: 'list', entity_id: list.id, summary: `${type === 'segment' ? 'Segment' : 'List'} “${name.trim()}” updated` }); return d.lists.find((x) => x.id === list.id); }
+      if (list) { upd(d.lists, list.id, { name: name.trim(), description, rules: type === 'segment' ? rules : null }); logActivity(d, ctx, { event_type: 'list.updated', entity_type: 'list', entity_id: list.id, summary: `${type === 'segment' ? 'Smart group' : 'Group'} “${name.trim()}” updated` }); return d.lists.find((x) => x.id === list.id); }
       return createList(d, ctx, { name, description, type, rules: type === 'segment' ? rules : null });
-    }, { success: list ? 'Saved.' : type === 'segment' ? 'Segment created.' : 'List created.' });
+    }, { success: list ? 'Saved.' : type === 'segment' ? 'Smart group created.' : 'Group created.' });
     if (saved) { onSaved?.(saved); onClose(); }
   };
   return (
-    <Modal title={list ? `Edit ${list.name}` : type === 'segment' ? 'New dynamic segment' : 'New static list'} size={type === 'segment' ? 'lg' : undefined} onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={save}>{list ? 'Save' : 'Create'}</button></>}>
+    <Modal title={list ? `Edit ${list.name}` : type === 'segment' ? 'New smart group' : 'New group'} size={type === 'segment' ? 'lg' : undefined} onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={save}>{list ? 'Save' : 'Create'}</button></>}>
       <div className="stack">
         {err && <Callout tone="err">{err}</Callout>}
         <Field label="Name"><input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
         <Field label="Description (optional)"><input className="input" value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
-        {type === 'segment' && <><div className="label">Conditions</div><RuleBuilder value={rules} onChange={setRules} /><Callout>Matches <strong>{plural(preview.length, 'contact')}</strong> right now{preview.length ? `: ${preview.slice(0, 4).map(fullName).join(', ')}${preview.length > 4 ? '…' : ''}` : ''}. Membership updates automatically.</Callout></>}
+        {type === 'segment' && <><div className="label">Conditions</div><RuleBuilder value={rules} onChange={setRules} /><Callout>Right now this matches <strong>{plural(preview.length, 'contact')}</strong> right now{preview.length ? `: ${preview.slice(0, 4).map(fullName).join(', ')}${preview.length > 4 ? '…' : ''}` : ''}. Membership updates automatically.</Callout></>}
       </div>
     </Modal>
   );
@@ -138,13 +138,13 @@ export function ListDetail() {
   const autos = o.automations.filter((a) => JSON.stringify(a.workflow).includes(list.id));
   const del = async () => {
     if (!(await confirm({ title: `Delete “${list.name}”?`, message: `${usedBy.length || autos.length ? `It is referenced by ${usedBy.length} campaign(s) and ${autos.length} automation(s). ` : ''}Contacts themselves are not deleted.`, confirmLabel: 'Delete', danger: true }))) return;
-    run((d, ctx) => { d.lists = d.lists.filter((l) => l.id !== list.id); d.listMemberships = d.listMemberships.filter((m) => m.list_id !== list.id); logActivity(d, ctx, { event_type: 'list.deleted', entity_type: 'list', entity_id: list.id, summary: `${list.type === 'segment' ? 'Segment' : 'List'} “${list.name}” deleted` }); }, { success: 'Deleted.' });
+    run((d, ctx) => { d.lists = d.lists.filter((l) => l.id !== list.id); d.listMemberships = d.listMemberships.filter((m) => m.list_id !== list.id); logActivity(d, ctx, { event_type: 'list.deleted', entity_type: 'list', entity_id: list.id, summary: `${list.type === 'segment' ? 'Smart group' : 'Group'} “${list.name}” deleted` }); }, { success: 'Deleted.' });
     nav('/app/lists');
   };
   const reach = { email: members.filter((c) => c.email).length, phone: members.filter((c) => c.phone).length };
   return (
     <>
-      <PageHead crumbs={[{ label: 'Lists & segments', to: '/app/lists' }, { label: list.name }]} title={list.name} description={list.description || (list.type === 'segment' ? 'Dynamic segment' : 'Static list')}
+      <PageHead crumbs={[{ label: 'Groups', to: '/app/lists' }, { label: list.name }]} title={list.name} description={list.description || (list.type === 'segment' ? 'Smart group — updates automatically' : 'Fixed group')}
         actions={<>
           <button className="btn" onClick={() => exportContacts(members, o, `${list.name.replace(/\W+/g, '-').toLowerCase()}.csv`)} disabled={!can('contacts.delete') || !members.length}><Download />Export</button>
           <button className="btn" onClick={() => nav('/app/campaigns/new', { state: { audience: { type: list.type === 'segment' ? 'segment' : 'list', ids: [list.id] } } })} disabled={!can('campaigns.send') || !members.length}><Send />Send campaign</button>
@@ -161,7 +161,7 @@ export function ListDetail() {
       {list.type === 'segment' && <div style={{ marginBottom: 16 }}><Callout icon={Filter}><RuleSummary rules={list.rules} /></Callout></div>}
       <div className="card">
         <div className="toolbar"><div className="input-icon" style={{ maxWidth: 320, flex: 1 }}><Search /><input className="input input-sm" placeholder="Search members" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search members" /></div></div>
-        {members.length === 0 ? <Empty icon={ListChecks} title={list.type === 'segment' ? 'No contacts match these conditions' : 'This list is empty'} action={list.type === 'static' ? <button className="btn btn-primary" onClick={() => setAdding(true)}><UserPlus />Add contacts</button> : <button className="btn" onClick={() => setEditing(true)}>Edit conditions</button>} /> : (
+        {members.length === 0 ? <Empty icon={ListChecks} title={list.type === 'segment' ? 'No contacts match these conditions' : 'This group is empty'} action={list.type === 'static' ? <button className="btn btn-primary" onClick={() => setAdding(true)}><UserPlus />Add contacts</button> : <button className="btn" onClick={() => setEditing(true)}>Edit conditions</button>} /> : (
           <div className="table-wrap"><table className="table"><thead><tr><Th k="name">Name</Th><Th k="email">Email</Th><th>Channels</th><Th k="status">Status</Th>{list.type === 'static' && <th />}</tr></thead><tbody>
             {sorted.map((c) => <tr key={c.id}><td><Link to={`/app/contacts/${c.id}`} className="strong">{fullName(c)}</Link></td><td className="muted">{c.email || '—'}</td><td><ChannelAvail contact={c} /></td><td><ContactStatus status={c.status} /></td>
               {list.type === 'static' && <td className="right"><button className="btn btn-ghost btn-sm" disabled={!can('contacts.manage')} onClick={() => run((d, ctx) => removeFromList(d, ctx, list.id, [c.id]), { success: `${fullName(c)} removed.` })}>Remove</button></td>}</tr>)}

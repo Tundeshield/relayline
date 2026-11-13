@@ -82,6 +82,10 @@ export function ContactForm({ contact, onClose, onSaved }) {
           <Field label="Last name" htmlFor="cf-ln"><input id="cf-ln" className="input" value={f.last_name} onChange={(e) => set('last_name', e.target.value)} /></Field>
           <Field label="Email" error={errors.email} htmlFor="cf-em"><input id="cf-em" type="email" className={`input ${errors.email ? 'invalid' : ''}`} value={f.email} onChange={(e) => set('email', e.target.value)} /></Field>
           <Field label="Phone" error={errors.phone} hint="US numbers can be 10 digits; others need +country code." htmlFor="cf-ph"><input id="cf-ph" className={`input ${errors.phone ? 'invalid' : ''}`} value={f.phone} onChange={(e) => set('phone', e.target.value)} placeholder="(312) 555-0123" /></Field>
+          <Field className="full" label="Tags"><TagPicker value={f.tag_ids} onChange={(v) => set('tag_ids', v)} /></Field>
+        </div>
+        <details className="more" open={editing && !!(f.company || f.building || f.unit)}><summary>More details (company, building, unit, dates)</summary>
+          <div className="form-grid" style={{ marginTop: 12 }}>
           <Field label="Company / organisation" htmlFor="cf-co"><input id="cf-co" className="input" value={f.company} onChange={(e) => set('company', e.target.value)} /></Field>
           <Field label="Job title" htmlFor="cf-jt"><input id="cf-jt" className="input" value={f.job_title} onChange={(e) => set('job_title', e.target.value)} /></Field>
           <Field label="Building (custom)" htmlFor="cf-b"><input id="cf-b" className="input" value={f.building} onChange={(e) => set('building', e.target.value)} /></Field>
@@ -89,12 +93,12 @@ export function ContactForm({ contact, onClose, onSaved }) {
           <Field label="Lease end (custom)" htmlFor="cf-le"><input id="cf-le" type="date" className="input" value={f.lease_end} onChange={(e) => set('lease_end', e.target.value)} /></Field>
           <Field label="Renewal date (custom)" htmlFor="cf-rd"><input id="cf-rd" type="date" className="input" value={f.renewal_date} onChange={(e) => set('renewal_date', e.target.value)} /></Field>
           <Field label="Preferred channel" htmlFor="cf-pc"><select id="cf-pc" className="select" value={f.preferred_channel} onChange={(e) => set('preferred_channel', e.target.value)}><option value="">No preference</option><option value="email">Email</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option></select></Field>
-          <Field className="full" label="Tags"><TagPicker value={f.tag_ids} onChange={(v) => set('tag_ids', v)} /></Field>
-        </div>
+          </div>
+        </details>
         {!editing && (
           <div className="stack">
-            <div className="label">Consent at creation</div>
-            <Callout>Only record consent the contact actually gave. Having an email or phone number does not count as permission.</Callout>
+            <div className="label">Permission to contact</div>
+            <p className="faint xs">Only record permission the person actually gave you. Having their email or number isn’t permission on its own.</p>
             {['email', 'sms', 'whatsapp'].map((ch) => (
               <div key={ch} className="rule-row">
                 <span className="row"><ChannelIcon channel={ch} />{CHANNEL_LABEL[ch]}</span>
@@ -116,8 +120,8 @@ export function ListPickerModal({ title, lists, onPick, onClose, allowCreate, on
   return (
     <Modal title={title} onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-primary" disabled={!sel && !name.trim()} onClick={() => (name.trim() ? onCreate(name.trim()) : onPick(sel))}>Confirm</button></>}>
       <div className="stack">
-        {lists.length ? <Field label="List"><select className="select" value={sel} onChange={(e) => setSel(e.target.value)}>{lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field> : <p className="muted small">No static lists yet.</p>}
-        {allowCreate && <Field label="…or create a new list" hint="Leave blank to use the selected list."><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="New list name" /></Field>}
+        {lists.length ? <Field label="Group"><select className="select" value={sel} onChange={(e) => setSel(e.target.value)}>{lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></Field> : <p className="muted small">No static lists yet.</p>}
+        {allowCreate && <Field label="…or create a new group" hint="Leave blank to use the selected group."><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="New group name" /></Field>}
       </div>
     </Modal>
   );

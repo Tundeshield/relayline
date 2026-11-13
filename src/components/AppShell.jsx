@@ -11,14 +11,14 @@ import { cx, fullName, relTime } from '../lib/util';
 import { ROLE_LABEL } from '../lib/constants';
 import { resetDemoWorkspace } from '../data/seed';
 import Logo from './Logo';
+import { AssistantProvider, useAssistant } from './ai';
+import { Sparkles } from 'lucide-react';
 
 const NAV = [
-  ['OVERVIEW', [['/app', 'Dashboard', LayoutDashboard, true]]],
-  ['COMMUNICATIONS', [['/app/campaigns', 'Campaigns', Send], ['/app/automations', 'Automations', Workflow], ['/app/inbox', 'Inbox', Inbox, false, 'inbox'], ['/app/templates', 'Templates', FileText]]],
-  ['AUDIENCE', [['/app/contacts', 'Contacts', Users, true], ['/app/lists', 'Lists & Segments', ListChecks], ['/app/contacts/import', 'Import Contacts', Upload]]],
-  ['INSIGHTS', [['/app/analytics', 'Analytics', BarChart3], ['/app/activity', 'Activity Log', History]]],
-  ['WORKSPACE', [['/app/team', 'Team Members', UserCog], ['/app/settings', 'Settings', Settings], ['/app/help', 'Help & Support', LifeBuoy]]],
+  ['MAIN', [['/app', 'Home', LayoutDashboard, ['/app']], ['/app/inbox', 'Inbox', Inbox, ['/app/inbox'], 'inbox'], ['/app/campaigns', 'Campaigns', Send, ['/app/campaigns', '/app/templates']], ['/app/automations', 'Automations', Workflow, ['/app/automations']], ['/app/contacts', 'Contacts', Users, ['/app/contacts', '/app/lists']], ['/app/analytics', 'Reports', BarChart3, ['/app/analytics', '/app/activity']]]],
+  ['WORKSPACE', [['/app/settings', 'Settings', Settings, ['/app/settings', '/app/team']], ['/app/help', 'Help', LifeBuoy, ['/app/help']]]],
 ];
+const isActive = (path, prefixes) => prefixes.some((p) => (p === '/app' ? path === '/app' || path === '/app/' : path === p || path.startsWith(p + '/')));
 
 export function setTextSize(size) {
   document.documentElement.dataset.textSize = size;
@@ -26,6 +26,15 @@ export function setTextSize(size) {
 }
 
 export default function AppShell() {
+  return <AssistantProvider><Shell /></AssistantProvider>;
+}
+
+function AskAIButton() {
+  const { open } = useAssistant();
+  return <button className="btn btn-ai btn-sm" onClick={() => open()} title="Ask AI about your workspace"><Sparkles /><span className="desktop-only">Ask AI</span></button>;
+}
+
+function Shell() {
   const o = useOrg();
   const nav = useNavigate();
   const loc = useLocation();
@@ -61,8 +70,8 @@ export default function AppShell() {
           {NAV.map(([group, items]) => (
             <div className="nav-group" key={group}>
               <div className="nav-group-label">{group}</div>
-              {items.map(([to, label, Icon, end, count]) => (
-                <NavLink key={to} to={to} end={end} className={({ isActive }) => cx('nav-link', isActive && 'active')} title={collapsed ? label : undefined}>
+              {items.map(([to, label, Icon, prefixes, count]) => (
+                <NavLink key={to} to={to} className={() => cx('nav-link', isActive(loc.pathname, prefixes) && 'active')} title={collapsed ? label : undefined}>
                   <Icon /><span>{label}</span>{count === 'inbox' && unreadInbox > 0 && <span className="count">{unreadInbox}</span>}
                 </NavLink>
               ))}
@@ -97,7 +106,8 @@ export default function AppShell() {
           </Menu>
           <button className="search-trigger" onClick={() => setSearchOpen(true)} aria-label="Search"><Search size={16} /><span>Search contacts, campaigns…</span><kbd>⌘K</kbd></button>
           <div className="grow" />
-          {o.org?.is_demo && <span className="demo-pill desktop-only" title="All messaging in this workspace is simulated"><FlaskConical size={12} />Demo workspace</span>}
+          {o.org?.is_demo && <span className="demo-pill desktop-only" title="All messaging in this workspace is simulated"><FlaskConical size={12} />Demo</span>}
+          <AskAIButton />
           <NotificationsMenu o={o} unreadN={unreadN} />
           <Link to="/app/help" className="btn btn-ghost btn-icon" aria-label="Help"><HelpCircle /></Link>
           <Menu width={250} trigger={({ toggle }) => <button className="btn btn-ghost btn-icon" onClick={toggle} aria-label="Account menu"><Avatar name={o.user?.name} size="sm" /></button>}>
@@ -115,7 +125,7 @@ export default function AppShell() {
           </Menu>
         </header>
         {o.org?.is_demo && (
-          <div className="demo-banner" role="note"><FlaskConical size={14} />Demonstration workspace — every send, delivery and reply here is simulated. No real messages are sent. <button onClick={doReset}>Reset demo data</button></div>
+          <div className="demo-banner" role="note"><FlaskConical size={14} />Demo workspace — sends, deliveries and replies are simulated. No real messages are sent. <button onClick={doReset}>Reset demo data</button></div>
         )}
         <main className={cx(!loc.pathname.startsWith('/app/inbox') && 'content')} id="main"><Outlet /></main>
       </div>

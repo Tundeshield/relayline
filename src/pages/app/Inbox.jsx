@@ -11,7 +11,7 @@ import { fullName, relTime, fmtDateTime, fmtPhone, uid, cx, smsInfo } from '../.
 import { CHANNEL_LABEL, MESSAGE_STATUS } from '../../lib/constants';
 import { useAction, usePerm, useTitle } from '../../lib/hooks';
 
-const FOLDERS = [['all', 'All conversations', InboxIcon], ['unassigned', 'Unassigned', User], ['mine', 'Assigned to me', UserCheck], ['open', 'Open', CircleDot], ['closed', 'Closed', CheckCircle2]];
+const FOLDERS = [['needs', 'Needs reply', MessageCircle], ['all', 'All conversations', InboxIcon], ['unassigned', 'Unassigned', User], ['mine', 'Assigned to me', UserCheck], ['open', 'Open', CircleDot], ['closed', 'Closed', CheckCircle2]];
 const CHS = [['email', 'Email', Mail], ['sms', 'SMS', MessageSquare], ['whatsapp', 'WhatsApp', MessageCircle]];
 
 export default function Inbox() {
@@ -21,7 +21,7 @@ export default function Inbox() {
   const nav = useNavigate();
   const run = useAction();
   const can = usePerm();
-  const [folder, setFolder] = useState('all');
+  const [folder, setFolder] = useState('needs');
   const [chan, setChan] = useState('');
   const [assignee, setAssignee] = useState('');
   const [q, setQ] = useState('');
@@ -31,6 +31,7 @@ export default function Inbox() {
   const meId = o.user.id;
   const visible = o.conversations.filter((cv) => can('inbox.all') || cv.assigned_to === meId || !cv.assigned_to);
   const filtered = visible.filter((cv) => {
+    if (folder === 'needs' && !(cv.status === 'open' && lastMsg[cv.id]?.direction === 'in')) return false;
     if (folder === 'unassigned' && cv.assigned_to) return false;
     if (folder === 'mine' && cv.assigned_to !== meId) return false;
     if (folder === 'open' && cv.status !== 'open') return false;
@@ -40,7 +41,7 @@ export default function Inbox() {
     if (q) { const s = q.toLowerCase(); const ct = contactById[cv.contact_id]; if (!(fullName(ct).toLowerCase().includes(s) || o.conversationMessages.some((m) => m.conversation_id === cv.id && m.content.toLowerCase().includes(s)))) return false; }
     return true;
   }).sort((a, b) => b.last_message_at - a.last_message_at);
-  const count = (f) => visible.filter((cv) => (f === 'unassigned' ? !cv.assigned_to : f === 'mine' ? cv.assigned_to === meId : f === 'open' ? cv.status === 'open' : f === 'closed' ? cv.status === 'closed' : true)).length;
+  const count = (f) => visible.filter((cv) => (f === 'needs' ? cv.status === 'open' && lastMsg[cv.id]?.direction === 'in' : f === 'unassigned' ? !cv.assigned_to : f === 'mine' ? cv.assigned_to === meId : f === 'open' ? cv.status === 'open' : f === 'closed' ? cv.status === 'closed' : true)).length;
   const conv = o.conversations.find((c) => c.id === id);
   useEffect(() => { if (conv?.unread) run((d) => upd(d.conversations, conv.id, { unread: false })); }, [conv?.id, conv?.unread]); // eslint-disable-line
 
@@ -60,14 +61,14 @@ export default function Inbox() {
           <div className="input-icon"><Search /><input className="input input-sm" placeholder="Search conversations" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search conversations" /></div>
           <select className="select input-sm" value={assignee} onChange={(e) => setAssignee(e.target.value)} aria-label="Filter by assignee"><option value="">Any assignee</option><option value="none">Unassigned</option>{o.members.map((m) => <option key={m.user_id} value={m.user_id}>{m.user?.name}</option>)}</select>
         </div>
-        {filtered.length === 0 && <Empty icon={InboxIcon} title="No conversations">{q || chan || folder !== 'all' ? 'Nothing matches these filters.' : 'Replies to your campaigns and incoming messages appear here.'}</Empty>}
+        {filtered.length === 0 && <Empty icon={InboxIcon} title={folder === 'needs' && !q && !chan ? 'You’re all caught up' : 'No conversations'}>{folder === 'needs' && !q && !chan ? 'Nobody is waiting for a reply right now.' : q || chan || folder !== 'all' ? 'Nothing matches these filters.' : 'Replies to your campaigns and incoming messages appear here.'}</Empty>}
         {filtered.map((cv) => { const ct = contactById[cv.contact_id]; const lm = lastMsg[cv.id]; const as = o.members.find((m) => m.user_id === cv.assigned_to); return (
           <button key={cv.id} className={cx('conv-item', cv.id === id && 'active', cv.unread && 'unread')} onClick={() => nav(`/app/inbox/${cv.id}`)}>
             <div style={{ position: 'relative' }}><Avatar name={fullName(ct)} /><span style={{ position: 'absolute', right: -4, bottom: -4 }}><ChannelIcon channel={cv.channel} size={18} /></span></div>
             <div className="grow" style={{ minWidth: 0 }}>
               <div className="between"><span className="conv-name truncate small">{fullName(ct)}</span><span className="faint xs nowrap">{relTime(cv.last_message_at)}</span></div>
               <div className={cx('xs truncate', cv.unread ? '' : 'muted')} style={{ marginTop: 2 }}>{lm?.direction === 'out' ? 'You: ' : ''}{lm?.content}</div>
-              <div className="row" style={{ marginTop: 6, gap: 6 }}>{cv.status === 'closed' ? <Badge>Closed</Badge> : <Badge tone="accent">Open</Badge>}<span className="faint xs truncate">{as ? `→ ${as.user?.name}` : 'Unassigned'}</span></div>
+              <div className="row" style={{ marginTop: 6, gap: 6 }}>{cv.status === 'closed' && <Badge>Closed</Badge>}{lm?.direction === 'in' && cv.status === 'open' && <span className="badge badge-warn" style={{ height: 20 }}>Needs reply</span>}<span className="faint xs truncate">{as ? `→ ${as.user?.name}` : 'Unassigned'}</span></div>
             </div>
             {cv.unread && <span className="unread-dot" style={{ marginTop: 6 }} aria-label="Unread" />}
           </button>); })}

@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Upload, Download, FileText, AlertTriangle, CheckCircle2, XCircle, ArrowLeft, ArrowRight, Copy } from 'lucide-react';
 import { useOrg } from '../../data/store';
-import { PageHead, Field, Callout, Badge, Empty, Tabs } from '../../components/ui';
+import { CONTACT_TABS, PageHead, Field, Callout, Badge, Empty, Tabs } from '../../components/ui';
 import { TagPicker, resolveTags } from './shared';
 import { parseCSV, toCSV, download, isEmail, normalizePhone, plural, fullName } from '../../lib/util';
 import { createContact, updateContact, addToList, addTag, createList } from '../../services/contacts';
@@ -153,7 +153,7 @@ export default function ImportContacts() {
   const preview = tab === 'errors' ? invalid : tab === 'dups' ? dups : tab === 'ok' ? valid.filter((a) => !a.dup) : analysis;
   return (
     <>
-      <PageHead crumbs={[{ label: 'Contacts', to: '/app/contacts' }, { label: 'Import' }]} title="Import contacts" description="Upload a CSV, map its columns, review problems, then import." actions={<button className="btn" onClick={() => download('relayline-sample-contacts.csv', SAMPLE)}><Download />Sample CSV</button>} />
+      <PageHead tabs={CONTACT_TABS} title="Contacts" description="Upload a spreadsheet (CSV). We’ll match the columns, flag problems and duplicates, and show you everything before importing." actions={<button className="btn" onClick={() => download('relayline-sample-contacts.csv', SAMPLE)}><Download />Sample CSV</button>} />
       <div className="steps" aria-label="Import progress">{['Upload', 'Map columns', 'Review', 'Results'].map((s, i) => <span key={s} className={`step-pill ${step > i + 1 ? 'done' : step === i + 1 ? 'current' : ''}`}><span className="num">{i + 1}</span>{s}</span>)}</div>
 
       {step === 1 && (

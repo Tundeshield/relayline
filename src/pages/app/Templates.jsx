@@ -2,8 +2,9 @@ import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Plus, Search, FileText, Copy, Trash2, Pencil, Eye, Send } from 'lucide-react';
 import { useOrg, upd } from '../../data/store';
-import { PageHead, Empty, Modal, Field, ChannelIcon, Badge, Menu, MenuItem, useConfirm, Callout } from '../../components/ui';
+import { CAMPAIGN_TABS, PageHead, Empty, Modal, Field, ChannelIcon, Badge, Menu, MenuItem, useConfirm, Callout } from '../../components/ui';
 import Composer, { MessagePreview } from '../../components/Composer';
+import { WriteWithAI, AIButton } from '../../components/ai';
 import { uid, fmtDate, usedVariables } from '../../lib/util';
 import { TEMPLATE_CATEGORIES, CHANNEL_LABEL } from '../../lib/constants';
 import { logActivity } from '../../services/core';
@@ -38,7 +39,7 @@ export default function Templates() {
 
   return (
     <>
-      <PageHead title="Templates" description="Reusable, channel-specific messages with personalisation variables." actions={<button className="btn btn-primary" onClick={() => setEdit({})} disabled={!can('templates.manage')}><Plus />New template</button>} />
+      <PageHead tabs={CAMPAIGN_TABS} title="Campaigns" description="Saved messages you can reuse in campaigns and automations." actions={<button className="btn btn-primary" onClick={() => setEdit({})} disabled={!can('templates.manage')}><Plus />New template</button>} />
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="toolbar" style={{ borderBottom: 0 }}>
           <div className="input-icon" style={{ flex: '1 1 240px', maxWidth: 340 }}><Search /><input className="input input-sm" placeholder="Search templates" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search templates" /></div>
@@ -103,6 +104,7 @@ function TemplateEditor({ template, onClose }) {
   const run = useAction();
   const [f, setF] = useState({ name: template?.name || '', channel: template?.channel || 'email', category: template?.category || 'Announcement', subject: template?.subject || '', body: template?.content || '', template_name: template?.template_name || '' });
   const [errors, setErrors] = useState({});
+  const [ai, setAi] = useState(false);
   const sample = o.contacts.find((c) => (f.channel === 'email' ? c.email : c.phone));
   const save = () => {
     const er = {};
@@ -127,6 +129,8 @@ function TemplateEditor({ template, onClose }) {
           <Field label="Category"><select className="select" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>{TEMPLATE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></Field>
         </div>
         {template && <Callout>Channel can’t be changed after creation — duplicate the template to adapt it for another channel.</Callout>}
+        <div className="row"><AIButton className="btn-sm" onClick={() => setAi(true)}>{f.body ? 'Improve with AI' : 'Write with AI'}</AIButton></div>
+        {ai && <WriteWithAI channels={[f.channel]} current={{ [f.channel]: { subject: f.subject, body: f.body } }} contact={sample} onClose={() => setAi(false)} onAccept={(v) => setF((x) => ({ ...x, subject: v[f.channel].subject ?? x.subject, body: v[f.channel].body }))} />}
         <Composer channel={f.channel} value={{ subject: f.subject, body: f.body, template_name: f.template_name }} onChange={(v) => setF({ ...f, subject: v.subject ?? f.subject, body: v.body, template_name: v.template_name ?? f.template_name })} contact={sample} org={o.org} errors={errors} />
       </div>
     </Modal>

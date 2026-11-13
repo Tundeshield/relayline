@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Plus, Zap, GitBranch, Send, Clock, Square, Trash2, Save, Play, Pause, FlaskConical, History, AlertTriangle, CheckCircle2, XCircle, MinusCircle, Workflow, ArrowLeft, Tag, ListPlus, UserCog, Bell, StickyNote, Mail, MessageSquare, MessageCircle, Shuffle, PenLine } from 'lucide-react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { AIBadge, AIButton, Thinking } from '../../components/ai';
+import { generateAutomation, modifyAutomation, aiContext } from '../../services/ai';
+import { summarizeWorkflow } from '../../services/automation/summary';
+import { ensureTag } from '../../services/contacts';
+import { Sparkles, Wand2 } from 'lucide-react';
+import { Check, Lightbulb, Plus, Zap, GitBranch, Send, Clock, Square, Trash2, Save, Play, Pause, FlaskConical, History, AlertTriangle, CheckCircle2, XCircle, MinusCircle, Workflow, ArrowLeft, Tag, ListPlus, UserCog, Bell, StickyNote, Mail, MessageSquare, MessageCircle, Shuffle, PenLine } from 'lucide-react';
 import { useOrg, getState, tx } from '../../data/store';
 import { PageHead, Field, Callout, Badge, Menu, MenuItem, StatusBadge, Empty, Switch, useToast } from '../../components/ui';
 import { TRIGGERS, CONDITIONS, ACTIONS, DELAY, catalogItem, validateWorkflow } from '../../services/automation/catalog';
@@ -73,17 +78,22 @@ export default function AutomationBuilder() {
   const [dirty, setDirty] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const [panel, setPanel] = useState('config');
+  const [aiReview, setAiReview] = useState(null); // { prompt, notes, warnings }
+  const [editAI, setEditAI] = useState(false);
+  const [sp] = useSearchParams();
 
   if (id && !existing) return <Empty title="Automation not found" action={<Link className="btn" to="/app/automations">Back</Link>} />;
   if (!can('automations.manage')) return <Empty title="You don't have permission to manage automations" />;
   if (!draft) {
     return (
       <>
-        <PageHead crumbs={[{ label: 'Automations', to: '/app/automations' }, { label: 'New' }]} title="Create automation" description="Start from a proven workflow or from scratch. Everything can be edited." />
-        <div className="grid-3">{STARTERS.map((s) => (
-          <button key={s.key} className="card card-body stack" style={{ textAlign: 'left', cursor: 'pointer', gap: 8 }} onClick={() => { setDraft({ name: s.key === 'blank' ? 'Untitled automation' : s.name, description: s.desc, workflow: s.build(o) }); setSelected('trigger'); setDirty(true); }}>
-            <span className="node-icon ni-trigger" style={{ width: 32, height: 32 }}>{s.key === 'blank' ? <Plus size={16} /> : <Workflow size={16} />}</span>
-            <span className="strong">{s.name}</span><span className="muted small">{s.desc}</span>
+        <PageHead crumbs={[{ label: 'Automations', to: '/app/automations' }, { label: 'New' }]} title="Create an automation" description="Describe what should happen in plain words. AI builds the workflow; you review, test and switch it on." />
+        <CreateWithAI initial={sp.get('ai') || ''} onReady={(r, prompt) => { setDraft({ name: r.name, description: prompt, workflow: r.workflow }); setAiReview({ prompt, notes: r.notes, warnings: r.warnings }); setSelected('trigger'); setDirty(true); }} />
+        <div className="label" style={{ margin: '28px 0 10px' }}>Or start from a ready-made workflow</div>
+        <div className="grid-3">{STARTERS.map((st) => (
+          <button key={st.key} className="card card-body stack" style={{ textAlign: 'left', cursor: 'pointer', gap: 8 }} onClick={() => { setDraft({ name: st.key === 'blank' ? 'Untitled automation' : st.name, description: st.desc, workflow: st.build(o) }); setSelected('trigger'); setDirty(true); }}>
+            <span className="node-icon ni-trigger" style={{ width: 32, height: 32 }}>{st.key === 'blank' ? <Plus size={16} /> : <Workflow size={16} />}</span>
+            <span className="strong">{st.name}</span><span className="muted small">{st.desc}</span>
           </button>))}</div>
       </>
     );
@@ -103,6 +113,8 @@ export default function AutomationBuilder() {
     if (status === 'active' && errors.length) { setShowErrors(true); toast.error(`Fix ${errors.length} issue(s) before activating.`); return null; }
     const saved = tx((d) => {
       const ctx = ctxOf(d);
+      const fix = (n) => { if (typeof n.config?.tagId === 'string' && n.config.tagId.startsWith('new:')) n.config = { ...n.config, tagId: ensureTag(d, ctx, n.config.tagId.slice(4)).id }; (n.yes || []).forEach(fix); (n.no || []).forEach(fix); };
+      fix(draft.workflow.trigger); draft.workflow.steps.forEach(fix);
       if (existing) {
         upd(d.automations, existing.id, { name: draft.name.trim(), description: draft.description, workflow: draft.workflow, updated_at: ctx.now });
         logActivity(d, ctx, { event_type: 'automation.updated', entity_type: 'automation', entity_id: existing.id, summary: `Automation “${draft.name.trim()}” saved` });
@@ -130,6 +142,7 @@ export default function AutomationBuilder() {
         title={<span className="row-3 wrap"><input className="input" value={draft.name} onChange={(e) => { setDraft({ ...draft, name: e.target.value }); setDirty(true); }} aria-label="Automation name" style={{ fontSize: '1.2rem', fontWeight: 650, height: 42, maxWidth: 420, background: 'transparent' }} /><StatusBadge map={AUTOMATION_STATUS} status={status} />{dirty && <Badge tone="warn">Unsaved changes</Badge>}</span>}
         actions={<>
           {existing && <Link to={`/app/automations/${existing.id}/history`} className="btn"><History />History ({existing.run_count || 0})</Link>}
+          <AIButton onClick={() => setEditAI((x) => !x)}>Edit with AI</AIButton>
           <button className="btn" onClick={() => setPanel('test')}><FlaskConical />Test</button>
           <button className="btn" onClick={() => save()}><Save />Save</button>
           {status === 'active' ? <button className="btn" onClick={() => save('paused')}><Pause />Pause</button> : <button className="btn btn-primary" onClick={() => save('active')}><Play />{existing ? 'Save & activate' : 'Activate'}</button>}
@@ -137,6 +150,20 @@ export default function AutomationBuilder() {
       {existing?.paused_reason && status === 'paused' && <div style={{ marginBottom: 12 }}><Callout tone="warn">Paused automatically after an error: {existing.paused_reason}</Callout></div>}
       {showErrors && errors.length > 0 && <div style={{ marginBottom: 12 }}><Callout tone="err"><strong>{errors.length} issue(s) to fix:</strong> {errors.flatMap((e) => e.errors).slice(0, 4).join(' · ')}</Callout></div>}
 
+      {aiReview && (
+        <div className="ai-review" style={{ marginBottom: 14 }}>
+          <div className="between wrap"><span className="row strong"><Sparkles size={16} className="accent" />Built with AI from your description</span><button className="btn btn-ghost btn-sm" onClick={() => setAiReview(null)} aria-label="Dismiss">Dismiss</button></div>
+          <p className="faint small" style={{ marginTop: 4 }}>“{aiReview.prompt}”</p>
+          {aiReview.warnings?.map((w) => <div key={w} style={{ marginTop: 8 }}><Callout tone="warn">{w}</Callout></div>)}
+          {aiReview.notes?.length > 0 && <ul className="faint small" style={{ margin: '8px 0 0', paddingLeft: 18 }}>{aiReview.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+          <p className="small" style={{ marginTop: 10 }}><strong>Next:</strong> check each step below, run a test on a contact, then save and activate. Nothing runs until you activate it.</p>
+        </div>
+      )}
+      {editAI && <EditWithAI draft={draft} onClose={() => setEditAI(false)} onApply={(r) => { setDraft((d) => ({ ...d, name: r.name || d.name, workflow: r.workflow })); setDirty(true); setEditAI(false); toast.success('Changes applied to the workflow. Review them, then save.'); }} />}
+      <div className="card card-body" style={{ marginBottom: 14 }}>
+        <div className="between"><span className="label">What this automation does</span>{errors.length > 0 && <span className="xs warn">{errors.length} step{errors.length > 1 ? 's need' : ' needs'} attention</span>}</div>
+        {(() => { const lines = summarizeWorkflow(wf, getState()); return <><div className="small strong" style={{ marginTop: 8 }}>{lines[0]}</div><ol className="small" style={{ margin: '4px 0 0', paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 3 }}>{lines.slice(1).map((l, i) => <li key={i}>{l}</li>)}</ol></>; })()}
+      </div>
       <div className="builder">
         <div className="canvas" aria-label="Workflow canvas">
           <div className="flow">
@@ -175,7 +202,7 @@ function AddButton({ onAdd }) {
   return (
     <Menu align="left" width={260} trigger={({ toggle }) => <button type="button" className="add-step" onClick={toggle} aria-label="Add step"><Plus /></button>}>
       <div className="menu-label">Logic</div>
-      <MenuItem icon={GitBranch} onClick={() => onAdd('condition', 'consent')}>Condition (if / else)</MenuItem>
+      <MenuItem icon={GitBranch} onClick={() => onAdd('condition', 'consent')}>Check something (if / otherwise)</MenuItem>
       <MenuItem icon={Clock} onClick={() => onAdd('delay', 'delay')}>Wait / delay</MenuItem>
       <MenuItem icon={Square} onClick={() => onAdd('end', 'end')}>End workflow</MenuItem>
       <div className="menu-label">Actions</div>
@@ -302,6 +329,91 @@ export function ExecutionLog({ exec, contact }) {
       </div>
       {exec.error && <Callout tone="err">{exec.error}</Callout>}
       <div className="faint xs">{exec.test ? `${exec.previews?.length || 0} message(s) would be generated · nothing was sent or changed` : `${exec.message_ids?.length || 0} simulated message(s) generated`}</div>
+    </div>
+  );
+}
+
+
+// ---------- Create with AI ----------
+const AUTO_EXAMPLES = [
+  'Whenever I add a new contact, send them a welcome email. Wait three days and send another email asking if they need any assistance.',
+  'If an SMS fails, try sending the same message by email instead, but only if the contact has given permission to receive emails.',
+  'Send customers a reminder 24 hours before their appointment. If they haven’t confirmed by 12 hours before the appointment, send another reminder.',
+  'Send members an email 14 days before their membership expires. If they haven’t renewed after seven days, send a reminder by SMS if they have consented to SMS.',
+  'When a new resident is added to the Building A Residents list, send them a welcome message with the property manager’s contact details. Three days later, ask if they have settled in.',
+];
+function CreateWithAI({ initial, onReady }) {
+  const o = useOrg();
+  const [text, setText] = useState(initial);
+  const [answers, setAnswers] = useState({});
+  const [q, setQ] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [free, setFree] = useState('');
+  const run = async (t = text, ans = answers) => {
+    if (!t.trim()) return;
+    setBusy(true);
+    try {
+      const r = await generateAutomation(t, aiContext(o), ans);
+      if (r.status === 'clarify') setQ(r); else { setQ(null); onReady(r, t); }
+    } finally { setBusy(false); }
+  };
+  const ranRef = useState({ done: false })[0];
+  if (initial && !ranRef.done) { ranRef.done = true; setTimeout(() => run(initial), 0); }
+  const answer = (val) => {
+    if (q.key === 'text' || q.key === 'more') { const t = `${text} ${val}`; setText(t); setQ(null); run(t, answers); return; }
+    const ans = { ...answers, [q.key]: val }; setAnswers(ans); setQ(null); run(text, ans);
+  };
+  return (
+    <div className="ai-review" style={{ padding: 20 }}>
+      <div className="between"><h2 className="row" style={{ fontSize: '1.1rem' }}><Sparkles size={18} className="accent" />What would you like to automate?</h2><AIBadge label="Create with AI" /></div>
+      <div className="ai-prompt" style={{ marginTop: 12, background: 'var(--bg-elev)' }}>
+        <textarea className="textarea" style={{ minHeight: 90, border: 0, boxShadow: 'none', background: 'transparent' }} value={text} onChange={(e) => { setText(e.target.value); setQ(null); setAnswers({}); }} placeholder="e.g. Whenever I add a new contact, send them a welcome email. Wait three days and send another email asking if they need any help." aria-label="Describe the automation" onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) run(); }} />
+        <div className="between" style={{ padding: '0 10px 10px' }}><span className="faint xs">Say what starts it, what should happen, and any waits or conditions.</span><AIButton className="btn-sm btn-primary-ai" onClick={() => run()} disabled={busy || !text.trim()}>Build workflow</AIButton></div>
+      </div>
+      {busy && <div style={{ marginTop: 12 }}><Thinking label="Working out the trigger, steps and conditions…" /></div>}
+      {q && !busy && (
+        <div className="ai-answer" style={{ marginTop: 12 }}>
+          <div className="row xs accent" style={{ gap: 4, marginBottom: 6 }}><Sparkles size={12} />One quick question</div>
+          <div className="small strong">{q.question}</div>
+          {q.options?.length > 0 && <div className="row wrap" style={{ gap: 6, marginTop: 10 }}>{q.options.map((op) => <button key={op.label} className="chip" onClick={() => answer(op.value)}>{op.label}</button>)}</div>}
+          <form className="row" style={{ marginTop: 10 }} onSubmit={(e) => { e.preventDefault(); if (free.trim()) { answer(q.key === 'offset' ? free.trim() : free.trim()); setFree(''); } }}><input className="input input-sm" value={free} onChange={(e) => setFree(e.target.value)} placeholder="Or type your answer" aria-label="Answer" /><button className="btn btn-sm">Answer</button></form>
+        </div>
+      )}
+      {!text && !busy && <div className="stack" style={{ gap: 6, marginTop: 12 }}><span className="faint xs">Examples</span>{AUTO_EXAMPLES.map((e) => <button key={e} className="example" onClick={() => setText(e)}><Lightbulb size={14} />{e}</button>)}</div>}
+    </div>
+  );
+}
+
+// ---------- Edit with AI ----------
+function EditWithAI({ draft, onClose, onApply }) {
+  const o = useOrg();
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState(null);
+  const go = async (t = text) => { if (!t.trim()) return; setBusy(true); try { setRes(await modifyAutomation(draft.workflow, t, aiContext(o), draft.name)); } finally { setBusy(false); } };
+  const before = summarizeWorkflow(draft.workflow, getState());
+  const after = res?.workflow ? summarizeWorkflow(res.workflow, getState()) : null;
+  return (
+    <div className="ai-review" style={{ marginBottom: 14 }}>
+      <div className="between"><span className="row strong"><Wand2 size={16} className="accent" />Edit with AI</span><button className="btn btn-ghost btn-sm" onClick={onClose}>Close</button></div>
+      <form className="row" style={{ marginTop: 10 }} onSubmit={(e) => { e.preventDefault(); go(); }}>
+        <input className="input" value={text} onChange={(e) => { setText(e.target.value); setRes(null); }} placeholder="e.g. Change the first reminder from 24 hours to 48 hours" aria-label="Describe the change" autoFocus />
+        <AIButton type="submit" disabled={busy || !text.trim()}>Propose change</AIButton>
+      </form>
+      {!res && !busy && <div className="row wrap" style={{ gap: 6, marginTop: 10 }}>{['Change the wait to 2 days', 'Add an SMS follow-up if they don’t respond', 'Remove the second email', 'Only send this to contacts in Building A', 'Pause this workflow during weekends'].map((x) => <button key={x} className="chip" onClick={() => { setText(x); go(x); }}>{x}</button>)}</div>}
+      {busy && <div style={{ marginTop: 10 }}><Thinking label="Working out the change…" /></div>}
+      {res && res.status !== 'ok' && <div style={{ marginTop: 10 }}><Callout tone="warn">{res.message || res.question}</Callout></div>}
+      {res?.status === 'ok' && (
+        <div className="stack" style={{ marginTop: 12 }}>
+          <div><div className="label">Proposed changes</div><ul className="small" style={{ margin: '6px 0 0', paddingLeft: 18 }}>{res.changes.map((c) => <li key={c} className="diff-add">{c}</li>)}</ul></div>
+          <div className="grid-2">
+            <div className="card card-body"><div className="label">Before</div><ol className="xs muted" style={{ paddingLeft: 16, margin: '6px 0 0' }}>{before.slice(1, -1).map((l, i) => <li key={i}>{l}</li>)}</ol></div>
+            <div className="card card-body" style={{ borderColor: 'var(--accent-line)' }}><div className="label">After</div><ol className="xs" style={{ paddingLeft: 16, margin: '6px 0 0' }}>{after.slice(1, -1).map((l, i) => <li key={i}>{l}</li>)}</ol></div>
+          </div>
+          {res.validation?.length > 0 && <Callout tone="warn">After this change, {res.validation.length} step(s) will need details before the automation can be activated.</Callout>}
+          <div className="row"><button className="btn btn-primary" onClick={() => onApply(res)}><Check size={16} />Apply to workflow</button><button className="btn" onClick={() => setRes(null)}>Discard</button><span className="faint xs">Nothing is saved until you click Save.</span></div>
+        </div>
+      )}
     </div>
   );
 }

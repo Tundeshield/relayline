@@ -290,12 +290,21 @@ export function seedWorkspace(draft, { orgId, users }) {
     node('condition', 'responded', {}, { yes: [node('action', 'update_field', { field: 'appointment_confirmed', value: 'Yes' })], no: [node('action', 'notify', { message: '{{first_name}} {{last_name}} has not confirmed tomorrow’s appointment.' })] }),
   ] } }, 20);
 
+  const vipAuto = auto({ name: 'VIP Concierge Follow-up', description: 'Tag VIPs after they reply so the concierge team follows up.', status: 'active', workflow: { trigger: { type: 'reply.received', config: {} }, steps: [
+    node('condition', 'tag', { tagId: T.VIP }, { yes: [node('action', 'add_tag', { tagId: 'tag_concierge_deleted' }), node('action', 'notify', { message: 'VIP {{first_name}} {{last_name}} replied — please follow up.' })], no: [] }),
+  ] } }, 45);
+
   // Historical executions run through the engine
   const hctx = (at) => ({ orgId, userId: null, now: at, depth: 1, historical: true, noAutomations: true, system: true });
   ['Omar Haddad', 'Chloe Bennett', 'Luis Ramirez'].forEach((n) => startExecution(draft, hctx(C(n).created_at + 60000), welcome.id, C(n).id, { type: 'contact.added_to_list', contactId: C(n).id, listId: L.A }));
   draft.messages.filter((m) => m.organisation_id === orgId && m.status === 'failed' && m.campaign_id && m.role !== 'fallback' && find(draft.campaigns, m.campaign_id)?.delivery_mode !== 'fallback').slice(0, 7)
     .forEach((m) => startExecution(draft, hctx(m.failed_at + 120000), failed.id, m.contact_id, { type: 'message.failed', contactId: m.contact_id, messageId: m.id, channel: m.channel }));
   ['Natalie Brooks', 'Daniel Kim'].forEach((n) => startExecution(draft, hctx(now - 9 * DAY), renewal.id, C(n).id, { type: 'schedule', contactId: C(n).id, key: `renewal_date:${C(n).custom_fields.renewal_date}-early` }));
+
+  ['Maria Gonzalez', 'Catherine Wells'].forEach((n, i) => startExecution(draft, hctx(now - (9 - i * 4) * DAY), vipAuto.id, C(n).id, { type: 'reply.received', contactId: C(n).id, channel: 'email' }));
+  upd(draft.automations, vipAuto.id, { status: 'paused', paused_reason: 'Selected tag no longer exists.' });
+  logActivity(draft, ctx(now - 5 * DAY), { event_type: 'automation.paused', entity_type: 'automation', entity_id: vipAuto.id, summary: 'Automation “VIP Concierge Follow-up” paused automatically after an error', system: true });
+  notify(draft, ctx(now - 5 * DAY), { type: 'automation_error', message: 'Automation “VIP Concierge Follow-up” was paused after an error: Selected tag no longer exists.', link: `/app/automations/${vipAuto.id}/history`, tone: 'warn' });
 
   // ---------- Notes, activity & notifications ----------
   addNote(draft, ctx(now - 30 * DAY), C('Maria Gonzalez').id, 'Prefers text for urgent updates. Works night shifts — avoid calls before noon.');

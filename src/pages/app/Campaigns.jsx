@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Search, Send, MoreHorizontal, Copy, XCircle, Pencil, Trash2, Eye } from 'lucide-react';
 import { useOrg } from '../../data/store';
-import { PageHead, Empty, StatusBadge, ChannelIcon, Progress, Menu, MenuItem, useConfirm, useSort } from '../../components/ui';
+import { CAMPAIGN_TABS, PageHead, Empty, StatusBadge, ChannelIcon, Progress, Menu, MenuItem, useConfirm, useSort } from '../../components/ui';
 import { CAMPAIGN_STATUS, CAMPAIGN_CATEGORIES, CHANNEL_LABEL } from '../../lib/constants';
 import { audienceLabel, campaignStats, cancelCampaign, duplicateCampaign } from '../../services/campaigns';
 import { logActivity } from '../../services/core';
@@ -38,7 +38,7 @@ export default function Campaigns() {
   const counts = Object.fromEntries(Object.keys(CAMPAIGN_STATUS).map((s) => [s, o.campaigns.filter((c) => c.status === s).length]));
   return (
     <>
-      <PageHead title="Campaigns" description="Compose once, choose your channels, and track what happened to every message." actions={<Link to="/app/campaigns/new" className={`btn btn-primary ${!can('campaigns.send') ? 'disabled' : ''}`} onClick={(e) => !can('campaigns.send') && e.preventDefault()}><Plus />Create campaign</Link>} />
+      <PageHead tabs={CAMPAIGN_TABS} title="Campaigns" description="Compose once, choose your channels, and track what happened to every message." actions={<Link to="/app/campaigns/new" className={`btn btn-primary ${!can('campaigns.send') ? 'disabled' : ''}`} onClick={(e) => !can('campaigns.send') && e.preventDefault()}><Plus />Create campaign</Link>} />
       <div className="row wrap" style={{ marginBottom: 14, gap: 6 }}>
         <button className={`btn btn-sm ${!status ? 'btn-primary' : ''}`} onClick={() => setStatus('')}>All · {o.campaigns.length}</button>
         {Object.entries(CAMPAIGN_STATUS).map(([k, v]) => <button key={k} className={`btn btn-sm ${status === k ? 'btn-primary' : ''}`} onClick={() => setStatus(k)}>{v.label} · {counts[k]}</button>)}

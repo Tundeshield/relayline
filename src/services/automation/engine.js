@@ -25,8 +25,8 @@ export function describeTrigger(trigger, state) {
     case 'reply.received': return `${c.channel ? CHANNEL_LABEL[c.channel] + ' reply' : 'Reply'} received${c.keyword ? ` containing “${c.keyword}”` : ''}`;
     case 'no_response': return `No response ${c.hours || '?'}h after delivery`;
     case 'time.specific': return `On ${c.at ? new Date(c.at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '…'}`;
-    case 'time.before_date': return `${c.days ?? '?'} days before ${CONTACT_FIELDS.find((f) => f.key === c.field)?.label || 'date'}`;
-    case 'time.after_date': return `${c.days ?? '?'} days after ${CONTACT_FIELDS.find((f) => f.key === c.field)?.label || 'date'}`;
+    case 'time.before_date': return `${c.days ?? '?'} day${Number(c.days) === 1 ? '' : 's'} before ${CONTACT_FIELDS.find((f) => f.key === c.field)?.label || 'date'}`;
+    case 'time.after_date': return `${c.days ?? '?'} day${Number(c.days) === 1 ? '' : 's'} after ${CONTACT_FIELDS.find((f) => f.key === c.field)?.label || 'date'}`;
     case 'time.recurring': return `Every ${c.every || '…'}`;
     case 'campaign.failure_threshold': return `Campaign failure rate ≥ ${c.percent ?? '?'}%`;
     case 'campaign.completed': return c.campaignId ? `“${name('campaigns', c.campaignId)}” completed` : 'Any campaign completed';
@@ -226,7 +226,12 @@ function evaluateCondition(draft, c, node) {
   }
 }
 
-function messageContent(draft, cfg, channel) {
+function messageContent(draft, cfg, channel, c) {
+  if (cfg.reuse_original) {
+    const orig = c?.exec?.trigger_event?.messageId ? find(draft.messages, c.exec.trigger_event.messageId) : null;
+    if (orig?.content) return { subject: orig.subject || cfg.subject || 'Update from {{organisation_name}}', body: orig.content };
+    if (c?.exec?.test) return { subject: cfg.subject || 'Update', body: '[The original message will be reused here]' };
+  }
   const tpl = cfg.templateId ? find(draft.templates, cfg.templateId) : null;
   return { subject: cfg.subject || tpl?.subject || '', body: cfg.body || tpl?.content || '' };
 }
@@ -253,9 +258,9 @@ function runAction(draft, c, node) {
   const vPatch = (patch) => { if (test && c.virtual?.contact) c.virtual.contact = { ...c.virtual.contact, ...patch }; };
 
   switch (node.type) {
-    case 'send_email': return send('email', messageContent(draft, cfg, 'email'));
-    case 'send_sms': return send('sms', messageContent(draft, cfg, 'sms'));
-    case 'send_whatsapp': return send('whatsapp', messageContent(draft, cfg, 'whatsapp'));
+    case 'send_email': return send('email', messageContent(draft, cfg, 'email', c));
+    case 'send_sms': return send('sms', messageContent(draft, cfg, 'sms', c));
+    case 'send_whatsapp': return send('whatsapp', messageContent(draft, cfg, 'whatsapp', c));
     case 'send_alternative': {
       need();
       const orig = c.exec.trigger_event.messageId ? find(draft.messages, c.exec.trigger_event.messageId) : null;

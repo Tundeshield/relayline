@@ -23,6 +23,32 @@ npm run dev      # http://localhost:5173
 npm run build    # outputs dist/
 ```
 
+## AI layer (demo mode)
+
+Users describe what they want and the platform builds it, while they stay in control. Nothing is sent and no automation is switched on without explicit confirmation.
+
+| Where | What it does |
+|---|---|
+| **Write with AI**: campaign composer, templates | Drafts from a short description. Generates email, SMS and WhatsApp versions with the same key facts. Improve / shorter / more detail / fix grammar / personalise / change tone (professional, friendly, persuasive, urgent). Subject-line and call-to-action ideas. Adapt one version to the other channels. You review and edit, then **Use these drafts** fills the normal composer. |
+| **Create automation with AI**: Automations, Home | Turns plain language into a real workflow in the *same schema* as the manual builder: triggers, waits, if/otherwise checks, consent checks and channel-specific sends. Asks one short question when something essential is missing (e.g. "How long before the appointment?"). Shows a plain-language summary and the visual workflow, flags missing details (e.g. [bracketed] placeholders). Test on a contact, then activate. |
+| **Edit with AI**: any automation | "Change the wait to 2 days", "Add an SMS follow-up if they don't respond", "Remove the second email", "Only send to contacts in Building A", "Pause at weekends". Shows proposed changes with before/after before applying. Nothing is saved until you click Save. |
+| **Explain with AI**: automation run history | Reads execution logs and messages to explain failures and skipped steps in plain words, with a suggested fix. |
+| **Ask AI**: top bar, every page | Context-aware questions answered **only** from workspace data: contacts not messaged in 30 days, missing email, Building B residents, who hasn't responded, why recipients were excluded, highest failure channel, monthly summary, best campaigns. Says so when it can't answer. |
+| **Goal box**: Home | "Help me write a message to all our residents", "Remind customers about their appointments", "Send another message if the first one fails", "Show me who hasn't responded". Routes to the right flow. |
+
+Architecture: `src/services/ai/` has one provider boundary (`provider.js` → `runAI(task, input)`) and six tasks: message generation, rewriting, channel adaptation, automation generation, automation modification, and workspace Q&A. The current provider is a deterministic, offline **demo engine** (`demoEngine.js`, rule-based NLU). A hosted model can replace it by implementing the same tasks (e.g. via a Netlify Function), with no UI changes. AI calls are logged per workspace in `aiLog`. AI-built automations and drafts use the existing automation engine and campaign composer, so there is one system, not two.
+
+## Simplification pass (what changed)
+
+- **Navigation:** went from 15 sidebar items to 8: Home, Inbox, Campaigns, Automations, Contacts, Reports, Settings, Help. Related pages are now tabs: Campaigns / Templates, All contacts / Groups / Import, Performance / Activity log. Team moved into Settings.
+- **Plain language:** "Lists & segments" → **Groups** (fixed / smart), "Analytics" → **Reports**, "Dashboard" → **Home**, fallback → "Send once, with a backup", consent → "Permission to contact".
+- **Campaigns:** 6 steps → **3**: *Who & how*, *Write*, *Review & send*. The name is optional (auto-generated), "marketing" is a single checkbox, and type, internal note, acknowledgement and backup settings sit behind *More options*. Write with AI is front and centre.
+- **Contacts:** fewer table columns (email and phone stacked, "Can receive" channels). Optional fields are tucked under *More details* in the form.
+- **Inbox:** opens on **Needs reply** (open conversations where the last message is from the contact), with a clear badge.
+- **Reports:** 10 metric tiles → 5. Added a plain-English "Key takeaways" card. Removed a duplicate failure chart.
+- **Home:** goal box plus a **Needs your attention** list (waiting replies, failures, paused automations, drafts, scheduled sends).
+- **Automations:** every workflow shows "What this automation does" in plain sentences above the canvas.
+
 ## Architecture
 
 ```
@@ -43,6 +69,9 @@ src/
 - **Automation engine** runs independently of messaging: triggers come from domain events (`emit()`), conditions read contact/consent data, and send actions go through the messaging service.
 
 ## What works (tested end to end in headless Chrome)
+
+AI acceptance criteria 1–12 and the simplified campaign, import and inbox journeys all pass in the automated test suite.
+
 
 | Journey | Status |
 |---|---|

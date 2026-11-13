@@ -25,7 +25,6 @@ import AutomationBuilder from './pages/app/AutomationBuilder';
 import { AutomationHistory, ExecutionDetail } from './pages/app/AutomationHistory';
 import Analytics from './pages/app/Analytics';
 import ActivityLog from './pages/app/ActivityLog';
-import Team from './pages/app/Team';
 import Settings from './pages/app/Settings';
 import Help from './pages/app/Help';
 import Notifications from './pages/app/Notifications';
@@ -85,7 +84,7 @@ export default function App() {
           <Route path="lists/:id" element={<ListDetail />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="activity" element={<ActivityLog />} />
-          <Route path="team" element={<Team />} />
+          <Route path="team" element={<Navigate to="/app/settings/team" replace />} />
           <Route path="settings" element={<Settings />} />
           <Route path="settings/:tab" element={<Settings />} />
           <Route path="help" element={<Help />} />

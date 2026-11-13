@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Download, Info, ExternalLink } from 'lucide-react';
 import { useOrg } from '../../data/store';
-import { PageHead, Segmented, ChannelIcon, Drawer, StatusBadge, Empty, Callout } from '../../components/ui';
+import { REPORT_TABS, PageHead, Segmented, ChannelIcon, Drawer, StatusBadge, Empty, Callout } from '../../components/ui';
 import { StackedBars, LineChart, HBars, Legend, SERIES_COLORS } from '../../components/charts';
 import { summarize, filterMessages, timeSeries, rangeFor, isAttempted, isDelivered, msgTime } from '../../services/analytics';
 import { campaignStats } from '../../services/campaigns';
@@ -13,7 +13,7 @@ import { useTitle, usePerm } from '../../lib/hooks';
 const iso = (ts) => new Date(ts).toISOString().slice(0, 10);
 
 export default function Analytics() {
-  useTitle('Analytics');
+  useTitle('Reports');
   const o = useOrg();
   const can = usePerm();
   const [sp] = useSearchParams();
@@ -49,21 +49,16 @@ export default function Analytics() {
   if (!can('analytics.view')) return <Empty title="You don't have access to analytics">Ask a workspace admin to change your role.</Empty>;
 
   const tiles = [
-    ['Total messages', s.total, 'All message records, including not-sent', () => open('All message records', () => true)],
-    ['Messages attempted', s.attempted, 'Handed to the (simulated) provider', () => open('Attempted messages', isAttempted)],
-    ['Delivered', s.delivered, 'Delivery confirmed', () => open('Delivered messages', isDelivered)],
-    ['Failed', s.failed, 'Rejected or bounced', () => open('Failed messages', (m) => m.status === 'failed')],
-    ['Delivery rate', s.attempted ? `${s.deliveryRate.toFixed(1)}%` : '—', 'Delivered ÷ messages with a final report', null],
-    ['Replies received', s.replied, 'Messages that got a reply', () => open('Messages with replies', (m) => !!m.replied_at)],
-    ['Response rate', s.delivered ? `${s.responseRate.toFixed(1)}%` : '—', 'Replies ÷ delivered', null],
-    ['Campaigns sent', camps.length, 'Started in this period', null],
-    ['Active automations', activeAutos, 'Currently active', null],
-    ['Automation executions', execs.length, 'Live runs in this period', null],
+    ['Messages sent', s.attempted, `${s.skipped} more weren’t sent (no permission or details)`, () => open('Messages sent', isAttempted)],
+    ['Delivered', s.attempted ? `${s.deliveryRate.toFixed(1)}%` : '—', `${s.delivered} messages confirmed delivered`, () => open('Delivered messages', isDelivered)],
+    ['Failed', s.failed, s.failed ? 'Click to see who and why' : 'Nothing failed', () => open('Failed messages', (m) => m.status === 'failed')],
+    ['Replies', s.replied, s.delivered ? `${s.responseRate.toFixed(1)}% of delivered messages got a reply` : 'Messages that got a reply', () => open('Messages with replies', (m) => !!m.replied_at)],
+    ['Automation runs', execs.length, `${activeAutos} automation${activeAutos === 1 ? '' : 's'} active`, null],
   ];
 
   return (
     <>
-      <PageHead title="Analytics" description="Communication volume, delivery and responses — computed from the underlying message records." actions={<button className="btn" onClick={exportReport}><Download />Export report</button>} />
+      <PageHead tabs={REPORT_TABS} title="Reports" description="How your messages are doing — what was delivered, what failed and who replied. Click any number to see the people behind it." actions={<button className="btn" onClick={exportReport}><Download />Export report</button>} />
       <div className="card" style={{ marginBottom: 16 }}><div className="toolbar" style={{ borderBottom: 0 }}>
         <Segmented value={preset} onChange={setPreset} options={[['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days'], ['custom', 'Custom']]} label="Date range" />
         {preset === 'custom' && <><input type="date" className="input input-sm" style={{ width: 'auto' }} value={custom.from} onChange={(e) => setCustom({ ...custom, from: e.target.value })} aria-label="From date" /><span className="faint">to</span><input type="date" className="input input-sm" style={{ width: 'auto' }} value={custom.to} onChange={(e) => setCustom({ ...custom, to: e.target.value })} aria-label="To date" /></>}
@@ -73,11 +68,12 @@ export default function Analytics() {
       </div></div>
       {badRange && <div style={{ marginBottom: 16 }}><Callout tone="err">The start date must be before the end date.</Callout></div>}
 
-      <div className="grid-4" style={{ gridTemplateColumns: 'repeat(5, minmax(0,1fr))', marginBottom: 16 }} >
+      <div className="grid-5" style={{ marginBottom: 16 }}>
         {tiles.map(([l, v, sub, fn]) => <button key={l} className="card stat" style={{ textAlign: 'left', cursor: fn ? 'pointer' : 'default' }} onClick={fn || undefined} disabled={!fn} title={fn ? 'Open the underlying records' : undefined}><div className="stat-label">{l}</div><div className="stat-value" style={{ fontSize: '1.4rem' }}>{typeof v === 'number' ? fmtNum(v) : v}</div><div className="faint xs">{sub}</div></button>)}
       </div>
       <style>{`@media (max-width: 1200px){ .grid-4[style*="repeat(5"]{ grid-template-columns: repeat(2,minmax(0,1fr)) !important; } }`}</style>
 
+      {s.attempted > 0 && <Insights byCh={byCh} campRows={campRows} s={s} label={label} />}
       {s.total === 0 && !badRange ? <div className="card"><Empty title="No messages in this period">Widen the date range or clear filters.</Empty></div> : <>
         <div className="grid-2" style={{ marginBottom: 16 }}>
           <div className="card"><div className="card-head"><h3>Message volume over time</h3><span className="faint xs">{vol.bucket > 864e5 ? 'Weekly' : 'Daily'} · click a bar for records</span></div><div className="card-body">
@@ -89,9 +85,8 @@ export default function Analytics() {
             <div style={{ marginTop: 10 }}><Legend items={[{ key: 'd', label: 'Delivered', color: SERIES_COLORS.delivered }, { key: 'f', label: 'Failed', color: SERIES_COLORS.failed }]} /></div>
           </div></div>
         </div>
-        <div className="grid-3" style={{ marginBottom: 16 }}>
+        <div className="grid-2" style={{ marginBottom: 16 }}>
           <div className="card"><div className="card-head"><h3>Channel usage</h3></div><div className="card-body"><HBars rows={byCh.map((b) => ({ key: b.ch, label: CHANNEL_LABEL[b.ch], value: b.attempted, color: SERIES_COLORS[b.ch], icon: <ChannelIcon channel={b.ch} />, sub: s.attempted ? `${Math.round((b.attempted / s.attempted) * 100)}%` : '' }))} onRowClick={(r) => open(`${r.label} messages`, (m) => m.channel === r.key && isAttempted(m))} /></div></div>
-          <div className="card"><div className="card-head"><h3>Failed message trend</h3></div><div className="card-body"><LineChart height={180} labels={perf.labels} series={[{ key: 'failed', label: 'Failed', color: SERIES_COLORS.failed, values: perf.series.failed }]} onPointClick={(i) => open(`Failed · ${perf.labels[i]}`, (m) => m.status === 'failed' && msgTime(m) >= perf.ranges[i][0] && msgTime(m) < perf.ranges[i][1])} /></div></div>
           <div className="card"><div className="card-head"><h3>Response activity</h3></div><div className="card-body"><StackedBars height={180} labels={replies.labels} series={[{ key: 'replied', label: 'Replies', color: SERIES_COLORS.replied, values: replies.series.replied }]} onBarClick={(i) => open(`Replies · ${replies.labels[i]}`, (m) => m.replied_at && m.replied_at >= replies.ranges[i][0] && m.replied_at < replies.ranges[i][1])} /></div></div>
         </div>
 
@@ -119,6 +114,18 @@ export default function Analytics() {
       {drill && <RecordsDrawer drill={drill} onClose={() => setDrill(null)} />}
     </>
   );
+}
+
+function Insights({ byCh, campRows, s, label }) {
+  const out = [];
+  const withFail = byCh.filter((b) => b.attempted).sort((a, b) => b.failed / b.attempted - a.failed / a.attempted);
+  if (withFail[0]?.failed) out.push(`${CHANNEL_LABEL[withFail[0].ch]} had the most failures (${pct(withFail[0].failed, withFail[0].attempted)} of messages). Check those contacts’ details.`);
+  const best = [...campRows].filter((r) => r.st.delivered >= 3).sort((a, b) => b.st.replied / b.st.delivered - a.st.replied / a.st.delivered)[0];
+  if (best?.st.replied) out.push(`“${best.c.name}” got the most engagement: ${best.st.replied} replies from ${best.st.delivered} delivered messages.`);
+  if (s.skipped) out.push(`${s.skipped} messages weren’t sent because people hadn’t given permission or were missing an email or phone number.`);
+  if (s.pending) out.push(`${s.pending} messages are still waiting for a delivery report.`);
+  if (!out.length) return null;
+  return <div className="card card-body" style={{ marginBottom: 16 }}><div className="label">Key takeaways · {label}</div><ul className="small" style={{ margin: '8px 0 0', paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>{out.map((t) => <li key={t}>{t}</li>)}</ul></div>;
 }
 
 function RecordsDrawer({ drill, onClose }) {

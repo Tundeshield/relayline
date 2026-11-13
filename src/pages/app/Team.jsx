@@ -8,7 +8,7 @@ import { ROLES, ROLE_LABEL, ROLE_DESC, PERMISSIONS, DEFAULT_PERMISSIONS, PLANS }
 import { isEmail, fmtDate, relTime } from '../../lib/util';
 import { useAction, usePerm, useTitle } from '../../lib/hooks';
 
-export default function Team() {
+export default function Team({ embedded }) {
   useTitle('Team members');
   const o = useOrg();
   const run = useAction();
@@ -31,7 +31,7 @@ export default function Team() {
 
   return (
     <>
-      <PageHead title="Team members" description={`${used} of ${seats} seats used on the ${PLANS[o.org.plan]?.name} plan (illustrative).`} actions={<button className="btn btn-primary" onClick={() => setInvite(true)} disabled={!manage}><UserPlus />Invite member</button>} />
+      {embedded ? <div className="between" style={{ marginBottom: 16 }}><span className="muted small">{used} of {seats} seats used on the {PLANS[o.org.plan]?.name} plan (illustrative).</span><button className="btn btn-primary" onClick={() => setInvite(true)} disabled={!manage}><UserPlus />Invite member</button></div> : <PageHead title="Team members" description={`${used} of ${seats} seats used on the ${PLANS[o.org.plan]?.name} plan (illustrative).`} actions={<button className="btn btn-primary" onClick={() => setInvite(true)} disabled={!manage}><UserPlus />Invite member</button>} />}
       {!manage && <div style={{ marginBottom: 16 }}><Callout>You can view the team, but only Owners and Admins can invite or change members.</Callout></div>}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="table-wrap"><table className="table"><thead><tr><th>Member</th><th>Role</th><th>Joined</th><th>Last active</th><th /></tr></thead><tbody>

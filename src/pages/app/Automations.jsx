@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Workflow, MoreHorizontal, Play, Pause, Copy, Trash2, Pencil, History, Archive, Search, AlertTriangle } from 'lucide-react';
+import { Sparkles, Plus, Workflow, MoreHorizontal, Play, Pause, Copy, Trash2, Pencil, History, Archive, Search, AlertTriangle } from 'lucide-react';
 import { useOrg, upd } from '../../data/store';
 import { PageHead, Empty, StatusBadge, Menu, MenuItem, useConfirm, useSort, Callout, useToast } from '../../components/ui';
 import { AUTOMATION_STATUS } from '../../lib/constants';
@@ -46,8 +46,8 @@ export default function Automations() {
   const paused = o.automations.filter((a) => a.status === 'paused' && a.paused_reason);
   return (
     <>
-      <PageHead title="Automations" description="Workflows that react to contact changes, messages, replies, dates and campaigns." actions={<Link to="/app/automations/new" className="btn btn-primary" onClick={(e) => !can('automations.manage') && e.preventDefault()}><Plus />Create automation</Link>} />
-      {paused.map((a) => <div key={a.id} style={{ marginBottom: 12 }}><Callout tone="warn" icon={AlertTriangle}><strong>{a.name}</strong> was paused automatically after an error: {a.paused_reason} <Link className="accent" to={`/app/automations/${a.id}`}>Fix workflow</Link></Callout></div>)}
+      <PageHead title="Automations" description="Messages and tasks that happen on their own — like welcomes, reminders and follow-ups. Describe one in plain words and AI will build it." actions={<><Link to="/app/automations/new" className="btn" onClick={(e) => !can('automations.manage') && e.preventDefault()}><Plus />From a template</Link><Link to="/app/automations/new" className="btn btn-primary" onClick={(e) => !can('automations.manage') && e.preventDefault()}><Sparkles />Create automation with AI</Link></>} />
+      {paused.map((a) => <div key={a.id} style={{ marginBottom: 12 }}><Callout tone="warn" icon={AlertTriangle}><strong>{a.name}</strong> was paused automatically after an error: {a.paused_reason} <Link className="accent" to={`/app/automations/${a.id}`}>Fix workflow</Link> · <Link className="accent" to={`/app/automations/${a.id}/history`}>Explain with AI</Link></Callout></div>)}
       <div className="card">
         <div className="toolbar">
           <div className="input-icon" style={{ flex: '1 1 220px', maxWidth: 320 }}><Search /><input className="input input-sm" placeholder="Search automations" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search automations" /></div>

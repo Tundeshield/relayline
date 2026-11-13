@@ -116,11 +116,11 @@ export default function ContactProfile() {
             <TagPicker value={c.tag_ids} onChange={(v) => can('contacts.manage') && run((d, ctx) => { const next = resolveTags(d, ctx, v); next.filter((t) => !c.tag_ids.includes(t)).forEach((t) => addTag(d, ctx, c.id, t)); c.tag_ids.filter((t) => !next.includes(t)).forEach((t) => removeTag(d, ctx, c.id, t)); })} />
           </div></div>
 
-          <div className="card"><div className="card-head"><h3>Lists & segments</h3>
-            {can('contacts.manage') && <select className="select input-sm" style={{ width: 'auto' }} value="" onChange={(e) => e.target.value && run((d, ctx) => addToList(d, ctx, e.target.value, [c.id]), { success: 'Added to list.' })} aria-label="Add to list"><option value="">Add to list…</option>{o.lists.filter((l) => l.type === 'static' && !lists.some((x) => x.id === l.id)).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select>}
+          <div className="card"><div className="card-head"><h3>Groups</h3>
+            {can('contacts.manage') && <select className="select input-sm" style={{ width: 'auto' }} value="" onChange={(e) => e.target.value && run((d, ctx) => addToList(d, ctx, e.target.value, [c.id]), { success: 'Added to group.' })} aria-label="Add to list"><option value="">Add to group…</option>{o.lists.filter((l) => l.type === 'static' && !lists.some((x) => x.id === l.id)).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select>}
           </div><div className="card-body stack" style={{ gap: 8 }}>
             {lists.length === 0 && <span className="faint small">Not in any lists or segments.</span>}
-            {lists.map((l) => <div key={l.id} className="between small"><Link to={`/app/lists/${l.id}`} className="row" style={{ gap: 8 }}>{l.name}<Badge tone={l.type === 'segment' ? 'accent' : 'neutral'}>{l.type === 'segment' ? 'Segment' : 'List'}</Badge></Link>{l.type === 'static' && can('contacts.manage') && <button className="btn btn-ghost btn-sm" onClick={() => run((d, ctx) => removeFromList(d, ctx, l.id, [c.id]), { success: 'Removed from list.' })}>Remove</button>}</div>)}
+            {lists.map((l) => <div key={l.id} className="between small"><Link to={`/app/lists/${l.id}`} className="row" style={{ gap: 8 }}>{l.name}<Badge tone={l.type === 'segment' ? 'accent' : 'neutral'}>{l.type === 'segment' ? 'Smart' : 'Fixed'}</Badge></Link>{l.type === 'static' && can('contacts.manage') && <button className="btn btn-ghost btn-sm" onClick={() => run((d, ctx) => removeFromList(d, ctx, l.id, [c.id]), { success: 'Removed from group.' })}>Remove</button>}</div>)}
           </div></div>
 
           {convs.length > 0 && <div className="card"><div className="card-head"><h3>Conversations</h3></div><div className="card-body stack" style={{ gap: 8 }}>

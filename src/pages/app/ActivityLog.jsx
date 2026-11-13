@@ -2,7 +2,7 @@ import { useState, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, Download, ChevronRight, ChevronDown, History } from 'lucide-react';
 import { useOrg } from '../../data/store';
-import { PageHead, Empty, Badge, Avatar } from '../../components/ui';
+import { REPORT_TABS, PageHead, Empty, Badge, Avatar } from '../../components/ui';
 import { fmtDateTime, relTime, toCSV, download, plural, DAY } from '../../lib/util';
 import { useTitle } from '../../lib/hooks';
 
@@ -25,7 +25,7 @@ export default function ActivityLog() {
   const exp = () => download('activity-log.csv', toCSV([['timestamp', 'event', 'summary', 'by', 'entity_type', 'entity_id', 'details'], ...rows.map((a) => [new Date(a.created_at).toISOString(), a.event_type, a.summary, a.user_id ? name(a.user_id) : 'System', a.entity_type, a.entity_id, JSON.stringify(a.details || {})])]));
   return (
     <>
-      <PageHead title="Activity log" description="An organisation-wide audit trail of what happened, who did it, and when." actions={<button className="btn" onClick={exp} disabled={!rows.length}><Download />Export</button>} />
+      <PageHead tabs={REPORT_TABS} title="Reports" description="An organisation-wide audit trail of what happened, who did it, and when." actions={<button className="btn" onClick={exp} disabled={!rows.length}><Download />Export</button>} />
       <div className="card">
         <div className="toolbar">
           <div className="input-icon" style={{ flex: '1 1 240px', maxWidth: 340 }}><Search /><input className="input input-sm" placeholder="Search activity" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search activity" /></div>

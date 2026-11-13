@@ -5,10 +5,10 @@ import { localAdapter } from './adapters/localAdapter';
 export const ORG_COLLECTIONS = [
   'contacts', 'consents', 'tags', 'lists', 'listMemberships', 'campaigns', 'messages', 'conversations',
   'conversationMessages', 'templates', 'automations', 'executions', 'notifications', 'activity',
-  'suppressions', 'notes', 'invitations', 'memberships', 'simQueue',
+  'suppressions', 'notes', 'invitations', 'memberships', 'simQueue', 'aiLog',
 ];
 export const GLOBAL_COLLECTIONS = ['organisations', 'users'];
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export function emptyState() {
   const s = { version: SCHEMA_VERSION, session: null, prefs: { textSize: 'default' } };
@@ -22,8 +22,13 @@ const listeners = new Set();
 
 export function initStore(bootstrap) {
   const loaded = adapter.load();
-  state = loaded && loaded.version === SCHEMA_VERSION ? loaded : bootstrap(emptyState());
-  if (!loaded || loaded.version !== SCHEMA_VERSION) adapter.save(state);
+  if (loaded && loaded.version >= 3) {
+    // Non-destructive migration: add any collections introduced since the data was saved.
+    [...ORG_COLLECTIONS, ...GLOBAL_COLLECTIONS].forEach((c) => { if (!Array.isArray(loaded[c])) loaded[c] = []; });
+    loaded.version = SCHEMA_VERSION;
+    state = loaded;
+  } else state = bootstrap(emptyState());
+  adapter.save(state);
 }
 export const getState = () => state;
 export const subscribe = (l) => { listeners.add(l); return () => listeners.delete(l); };

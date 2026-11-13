@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Upload, Download, Search, Tag, ListPlus, Trash2, Users, X, MoreHorizontal, Pencil, Send } from 'lucide-react';
 import { useOrg } from '../../data/store';
-import { PageHead, Empty, useConfirm, useSort, Menu, MenuItem, useToast } from '../../components/ui';
+import { CONTACT_TABS, PageHead, Empty, useConfirm, useSort, Menu, MenuItem, useToast } from '../../components/ui';
 import { ContactForm, ChannelAvail, ContactStatus, TagPicker, ListPickerModal, resolveTags } from './shared';
 import { fullName, fmtDate, fmtPhone, toCSV, download, plural } from '../../lib/util';
 import { contactLists, deleteContacts, addTag, addToList, createList, removeFromList } from '../../services/contacts';
@@ -74,7 +74,7 @@ export default function Contacts() {
 
   return (
     <>
-      <PageHead title="Contacts" description={`${plural(o.contacts.length, 'contact')} in ${o.org.name}. Every person you communicate with, with their channels and consent.`}
+      <PageHead tabs={CONTACT_TABS} title="Contacts" description={`${plural(o.contacts.length, 'person', 'people')} you can communicate with.`}
         actions={<>
           <button className="btn" onClick={() => exportContacts(filtersOn ? sorted : o.contacts, o)} disabled={!can('contacts.delete') || !o.contacts.length} title={can('contacts.delete') ? 'Export to CSV' : 'Your role cannot export contacts'}><Download />Export</button>
           <Link to="/app/contacts/import" className="btn"><Upload />Import</Link>
@@ -84,7 +84,7 @@ export default function Contacts() {
         <div className="toolbar">
           <div className="input-icon" style={{ flex: '1 1 240px', maxWidth: 340 }}><Search /><input className="input input-sm" placeholder="Search name, email, phone, unit" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search contacts" /></div>
           <select className="select input-sm" style={{ width: 'auto' }} value={tag} onChange={(e) => setTag(e.target.value)} aria-label="Filter by tag"><option value="">All tags</option>{o.tags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
-          <select className="select input-sm" style={{ width: 'auto' }} value={list} onChange={(e) => setList(e.target.value)} aria-label="Filter by group"><option value="">All lists & segments</option>{o.lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
+          <select className="select input-sm" style={{ width: 'auto' }} value={list} onChange={(e) => setList(e.target.value)} aria-label="Filter by group"><option value="">All groups</option>{o.lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
           <select className="select input-sm" style={{ width: 'auto' }} value={channel} onChange={(e) => setChannel(e.target.value)} aria-label="Filter by channel availability"><option value="">Any channel</option><option value="email">Has email</option><option value="sms">Has phone (SMS/WhatsApp)</option><option value="missing_email">Missing email</option><option value="missing_phone">Missing phone</option></select>
           <select className="select input-sm" style={{ width: 'auto' }} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status"><option value="">Any status</option><option value="active">Active</option><option value="unsubscribed">Unsubscribed</option><option value="archived">Archived</option></select>
           {filtersOn && <button className="btn btn-ghost btn-sm" onClick={clear}><X />Clear</button>}
@@ -94,8 +94,8 @@ export default function Contacts() {
           <div className="toolbar" style={{ background: 'var(--accent-soft)' }}>
             <span className="strong small">{sel.length} selected</span>
             <button className="btn btn-sm" onClick={() => setBulk('tag')} disabled={!can('contacts.manage')}><Tag />Add tag</button>
-            <button className="btn btn-sm" onClick={() => setBulk('list')} disabled={!can('contacts.manage')}><ListPlus />Add to list</button>
-            <button className="btn btn-sm" onClick={() => setBulk('unlist')} disabled={!can('contacts.manage')}>Remove from list</button>
+            <button className="btn btn-sm" onClick={() => setBulk('list')} disabled={!can('contacts.manage')}><ListPlus />Add to group</button>
+            <button className="btn btn-sm" onClick={() => setBulk('unlist')} disabled={!can('contacts.manage')}>Remove from group</button>
             <button className="btn btn-sm" onClick={() => nav('/app/campaigns/new', { state: { contactIds: sel } })} disabled={!can('campaigns.send')}><Send />Message</button>
             <button className="btn btn-sm" onClick={() => exportContacts(o.contacts.filter((c) => selected.has(c.id)), o, 'selected-contacts.csv')} disabled={!can('contacts.delete')}><Download />Export</button>
             <button className="btn btn-sm btn-danger" onClick={bulkDelete} disabled={!can('contacts.delete')}><Trash2 />Delete</button>
@@ -111,18 +111,15 @@ export default function Contacts() {
             <table className="table">
               <thead><tr>
                 <th className="cell-check"><input type="checkbox" checked={allSel} onChange={toggleAll} aria-label="Select all" style={{ accentColor: 'var(--accent)' }} /></th>
-                <Th k="name">Name</Th><Th k="email">Email</Th><Th k="phone">Phone</Th><Th k="company">Company</Th><th>Tags</th><th>Lists</th><th>Channels</th><Th k="status">Status</Th><Th k="created_at">Added</Th><th />
+                <Th k="name">Name</Th><Th k="email">Email & phone</Th><th>Tags</th><th>Can receive</th><Th k="status">Status</Th><Th k="created_at">Added</Th><th />
               </tr></thead>
               <tbody>
                 {sorted.map((c) => (
                   <tr key={c.id} className={`clickable ${selected.has(c.id) ? 'selected' : ''}`} onClick={(e) => !e.target.closest('input,button,a') && nav(`/app/contacts/${c.id}`)}>
                     <td className="cell-check"><input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} aria-label={`Select ${fullName(c)}`} style={{ accentColor: 'var(--accent)' }} /></td>
-                    <td><Link to={`/app/contacts/${c.id}`} className="strong">{fullName(c)}</Link>{c.custom_fields?.unit && <div className="faint xs">{c.custom_fields.building} · {c.custom_fields.unit}</div>}</td>
-                    <td className="muted">{c.email || <span className="faint">—</span>}</td>
-                    <td className="muted nowrap">{fmtPhone(c.phone) || <span className="faint">—</span>}</td>
-                    <td className="muted">{c.company || <span className="faint">—</span>}</td>
+                    <td><Link to={`/app/contacts/${c.id}`} className="strong">{fullName(c)}</Link><div className="faint xs">{[c.custom_fields?.building && `${c.custom_fields.building} · ${c.custom_fields.unit || ''}`, c.company].filter(Boolean).join(' · ')}</div></td>
+                    <td className="small"><div>{c.email || <span className="warn xs">No email</span>}</div><div className="muted nowrap">{fmtPhone(c.phone) || <span className="warn xs">No phone</span>}</div></td>
                     <td><div className="row wrap" style={{ gap: 4, maxWidth: 220 }}>{c.tag_ids.slice(0, 3).map((t) => <span key={t} className="tag">{tagName[t]}</span>)}{c.tag_ids.length > 3 && <span className="faint xs">+{c.tag_ids.length - 3}</span>}</div></td>
-                    <td className="muted small" style={{ maxWidth: 200 }}>{memberships[c.id]?.filter((l) => l.type === 'static').map((l) => l.name).join(', ') || <span className="faint">—</span>}</td>
                     <td><ChannelAvail contact={c} /></td>
                     <td><ContactStatus status={c.status} /></td>
                     <td className="muted nowrap">{fmtDate(c.created_at)}</td>
@@ -137,13 +134,13 @@ export default function Contacts() {
           </div>
         )}
       </div>
-      <p className="faint xs" style={{ marginTop: 10 }}>Channel dots: green = opted in, red = opted out, none = no consent recorded. Dashed icon = channel detail missing.</p>
+      <p className="faint xs" style={{ marginTop: 10 }}>“Can receive”: green dot = opted in, red dot = opted out, no dot = no permission recorded yet, dashed = no email or phone.</p>
       {form && <ContactForm contact={form.contact} onClose={() => { setForm(null); if (sp.get('new')) setSp({}); }} onSaved={(c) => !form.contact && nav(`/app/contacts/${c.id}`)} />}
       {bulk === 'tag' && <BulkTag ids={sel} onClose={() => setBulk(null)} />}
-      {bulk === 'list' && <ListPickerModal title={`Add ${plural(sel.length, 'contact')} to a list`} lists={staticLists} allowCreate onClose={() => setBulk(null)}
-        onPick={(id) => { run((d, ctx) => addToList(d, ctx, id, sel), { success: (n) => `${plural(n, 'contact')} added to the list.` }); setBulk(null); }}
-        onCreate={(name) => { run((d, ctx) => { const l = createList(d, ctx, { name }); return addToList(d, ctx, l.id, sel); }, { success: (n) => `List “${name}” created with ${plural(n, 'contact')}.` }); setBulk(null); }} />}
-      {bulk === 'unlist' && <ListPickerModal title={`Remove ${plural(sel.length, 'contact')} from a list`} lists={staticLists} onClose={() => setBulk(null)}
+      {bulk === 'list' && <ListPickerModal title={`Add ${plural(sel.length, 'contact')} to a group`} lists={staticLists} allowCreate onClose={() => setBulk(null)}
+        onPick={(id) => { run((d, ctx) => addToList(d, ctx, id, sel), { success: (n) => `${plural(n, 'contact')} added to the group.` }); setBulk(null); }}
+        onCreate={(name) => { run((d, ctx) => { const l = createList(d, ctx, { name }); return addToList(d, ctx, l.id, sel); }, { success: (n) => `Group “${name}” created with ${plural(n, 'contact')}.` }); setBulk(null); }} />}
+      {bulk === 'unlist' && <ListPickerModal title={`Remove ${plural(sel.length, 'contact')} from a group`} lists={staticLists} onClose={() => setBulk(null)}
         onPick={(id) => { run((d, ctx) => removeFromList(d, ctx, id, sel), { success: (n) => `${plural(n, 'contact')} removed.` }); setBulk(null); }} />}
     </>
   );

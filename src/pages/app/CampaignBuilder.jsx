@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate, useParams, Link } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, Link, useSearchParams } from 'react-router-dom';
+import { WriteWithAI, AIButton } from '../../components/ai';
+import { channelIn } from '../../services/ai/nlp';
 import { ArrowLeft, ArrowRight, Save, Send, CalendarClock, Users, Mail, MessageSquare, MessageCircle, AlertTriangle, CheckCircle2, Search, Info, FlaskConical, Copy } from 'lucide-react';
 import { useOrg, getState } from '../../data/store';
 import { PageHead, Field, Callout, Badge, ChannelIcon, Modal, Tabs, Empty, useToast } from '../../components/ui';
@@ -13,7 +15,7 @@ import { useAction, usePerm, useTitle } from '../../lib/hooks';
 import { tx } from '../../data/store';
 import { ctxOf } from '../../services/core';
 
-const STEPS = ['Details', 'Audience', 'Channels', 'Compose', 'Schedule', 'Review'];
+const STEPS = ['Who & how', 'Write', 'Review & send'];
 const CH_ICON = { email: Mail, sms: MessageSquare, whatsapp: MessageCircle };
 
 // Time-zone helpers: interpret a local date-time string in a specific IANA zone.
@@ -62,7 +64,19 @@ export default function CampaignBuilder() {
   const [sampleId, setSampleId] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [sp] = useSearchParams();
+  const aiPrompt = sp.get('ai');
+  const [aiOpen, setAiOpen] = useState(null); // { brief, auto }
   const set = (patch) => setC((x) => ({ ...x, ...patch }));
+  useEffect(() => {
+    if (!aiPrompt || existing) return;
+    const low = aiPrompt.toLowerCase();
+    const list = o.lists.find((l) => low.includes(l.name.toLowerCase())) || (/\ball (?:our |the )?residents\b/.test(low) && o.lists.find((l) => /^all residents$/i.test(l.name))) || (low.match(/building ([a-z0-9])\b/) && o.lists.find((l) => l.name.toLowerCase().startsWith(`building ${low.match(/building ([a-z0-9])\b/)[1]}`)));
+    const ch = channelIn(low);
+    setC((x) => ({ ...x, channels: x.channels.length ? x.channels : ch ? [ch] : ['email', 'sms'], audience: list ? { type: list.type === 'segment' ? 'segment' : 'list', ids: [list.id] } : x.audience }));
+    setStep(1);
+    setAiOpen({ brief: aiPrompt, auto: true });
+  }, [aiPrompt]); // eslint-disable-line
   useEffect(() => { if (!c.channels.includes(composeTab) && c.channels[0]) setComposeTab(c.channels[0]); }, [c.channels]); // eslint-disable-line
 
   const s = getState();
@@ -77,41 +91,39 @@ export default function CampaignBuilder() {
 
   const validate = (i) => {
     const er = {};
-    if (i === 0 && !c.name.trim()) er.name = 'Give the campaign a name.';
-    if (i === 1) { if (c.audience.type !== 'all' && !c.audience.ids.length) er.audience = 'Choose at least one list, segment or contact.'; else if (!plan.recipients.length) er.audience = 'This audience has no contacts.'; }
-    if (i === 2) {
-      if (!c.channels.length) er.channels = 'Select at least one channel.';
-      if (multi && c.delivery_mode === 'fallback') {
-        if (!c.fallback.primary || !c.fallback.secondary) er.channels = 'Choose a primary and a fallback channel.';
-        else if (c.fallback.primary === c.fallback.secondary) er.channels = 'Primary and fallback channels must differ.';
-      }
+    if (i === 0) {
+      if (c.audience.type !== 'all' && !c.audience.ids.length) er.audience = 'Choose who should receive this.';
+      else if (!plan.recipients.length) er.audience = 'This audience has no contacts.';
+      if (!c.channels.length) er.channels = 'Pick at least one way to reach people.';
+      if (multi && c.delivery_mode === 'fallback' && (!c.fallback.primary || !c.fallback.secondary || c.fallback.primary === c.fallback.secondary)) er.channels = 'Choose a first channel and a different backup channel.';
     }
-    if (i === 3) {
+    if (i === 1) {
       c.channels.forEach((ch) => {
         const v = c.content[ch];
         if (!v.body?.trim()) er[`body_${ch}`] = `Write the ${CHANNEL_LABEL[ch]} message.`;
+        else if (/\[[^\]]+\]/.test(v.body + (v.subject || ''))) er[`body_${ch}`] = `Replace the [bracketed] placeholders in the ${CHANNEL_LABEL[ch]} message.`;
         if (ch === 'email' && !v.subject?.trim()) er[`subject_${ch}`] = 'Email needs a subject line.';
         if (ch === 'sms' && smsInfo(v.body || '').segments > 6) er[`body_${ch}`] = 'SMS is over 6 segments — shorten it.';
       });
     }
-    if (i === 4 && c.schedule.type === 'later') {
+    if (i === 2 && c.schedule.type === 'later') {
       const ts = zonedToUtc(c.schedule.at, c.schedule.timezone);
       if (!c.schedule.at || isNaN(ts)) er.schedule = 'Pick a date and time.';
       else if (ts < Date.now() + 60000) er.schedule = 'The scheduled time must be at least a minute in the future.';
       else if (ts > Date.now() + 366 * 86400000) er.schedule = 'Schedule within the next 12 months.';
     }
     setErrors(er);
-    if (i === 3 && Object.keys(er).length) { const bad = c.channels.find((ch) => er[`body_${ch}`] || er[`subject_${ch}`]); if (bad) setComposeTab(bad); }
+    if (i === 1 && Object.keys(er).length) { const bad = c.channels.find((ch) => er[`body_${ch}`] || er[`subject_${ch}`]); if (bad) setComposeTab(bad); }
     return !Object.keys(er).length;
   };
+  const autoName = () => c.name.trim() || c.content.email?.subject?.replace(/\{\{[^}]+\}\}/g, '').trim() || (Object.values(c.content).find((v) => v.body)?.body || '').replace(/\{\{[^}]+\}\}:?/g, '').replace(/^\W+/, '').split(/[.\n]/)[0].split(' ').slice(0, 7).join(' ') || `Campaign ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
   const go = (i) => { if (i <= step || [...Array(i).keys()].every((k) => validate(k))) { setStep(i); window.scrollTo(0, 0); } };
   const record = (status) => {
     const schedule_at = status === 'scheduled' ? zonedToUtc(c.schedule.at, c.schedule.timezone) : null;
     const { id: _id, created_at, created_by, ...rest } = c;
-    return { ...rest, name: c.name.trim(), status, schedule_at, channels: c.channels, fallback: multi ? c.fallback : { ...c.fallback } };
+    return { ...rest, name: autoName(), status, schedule_at, channels: c.channels, fallback: multi ? c.fallback : { ...c.fallback } };
   };
   const saveDraft = () => {
-    if (!c.name.trim()) { setStep(0); setErrors({ name: 'Name the campaign to save it as a draft.' }); return; }
     const saved = run((d, ctx) => saveCampaign(d, ctx, record('draft'), existing?.id), { success: 'Draft saved.' });
     if (saved) nav('/app/campaigns');
   };
@@ -143,19 +155,9 @@ export default function CampaignBuilder() {
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 300px', gap: 20, alignItems: 'start' }} className="builder-grid">
         <div className="card card-body stack-lg">
           {step === 0 && <>
-            <div><h2 style={{ fontSize: '1.1rem' }}>Campaign details</h2><p className="muted small">Internal information to help your team find and understand this campaign.</p></div>
-            <Field label="Campaign name" error={errors.name}><input className={cx('input', errors.name && 'invalid')} value={c.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Scheduled Water Maintenance" autoFocus /></Field>
-            <Field label="Internal description (optional)"><textarea className="textarea" style={{ minHeight: 70 }} value={c.description} onChange={(e) => set({ description: e.target.value })} placeholder="Not shown to recipients" /></Field>
-            <Field label="Category" hint={c.category === 'marketing' ? 'Marketing campaigns only reach contacts with explicit marketing consent.' : 'Operational communications follow your workspace consent rules.'}>
-              <div className="grid-3">{Object.entries(CAMPAIGN_CATEGORIES).map(([k, v]) => <label key={k} className={cx('choice', c.category === k && 'selected')}><input type="radio" name="cat" checked={c.category === k} onChange={() => set({ category: k })} /><span className="small">{v}</span></label>)}</div>
-            </Field>
-            {c.category === 'emergency' && <Callout tone="warn">Emergency notifications still respect opt-outs and suppression. Keep messages short and actionable.</Callout>}
-          </>}
-
-          {step === 1 && <AudienceStep c={c} set={set} plan={allChannelPlan} errors={errors} />}
-
-          {step === 2 && <>
-            <div><h2 style={{ fontSize: '1.1rem' }}>Channels</h2><p className="muted small">Choose one or more. Eligibility is based on contact details and consent for a {categoryPurpose(c.category)} message.</p></div>
+            <div><h2 style={{ fontSize: '1.1rem' }}>Who should get this, and how?</h2><p className="muted small">Pick your audience and the channels to use. You’ll write the message next.</p></div>
+            <AudienceStep c={c} set={set} plan={allChannelPlan} errors={errors} />
+            <div className="label" style={{ marginTop: 4 }}>Send by</div>
             {errors.channels && <Callout tone="err">{errors.channels}</Callout>}
             <div className="grid-3">{['email', 'sms', 'whatsapp'].map((ch) => { const I = CH_ICON[ch]; const pc = allChannelPlan.perChannel[ch]; const on = c.channels.includes(ch); const st = o.org.settings.channels[ch]?.status; return (
               <label key={ch} className={cx('choice', on && 'selected')} style={{ flexDirection: 'column', gap: 8 }}>
@@ -164,55 +166,53 @@ export default function CampaignBuilder() {
                 <span className="faint xs">{st === 'demo' ? 'Demo mode — simulated' : st === 'not_connected' ? 'Not connected — simulated sends only' : ''}</span>
               </label>); })}</div>
             {multi && <>
-              <div className="label">How should a multi-channel campaign behave?</div>
+              <div className="label">Some people can be reached on more than one of these. What should happen?</div>
               <div className="grid-2">
-                <label className={cx('choice', c.delivery_mode === 'all' && 'selected')}><input type="radio" name="mode" checked={c.delivery_mode === 'all'} onChange={() => set({ delivery_mode: 'all' })} /><span><span className="strong" style={{ display: 'block' }}>Send through all selected channels</span><span className="muted small">Every eligible recipient receives a message on <em>each</em> selected channel. Best for urgent notices where redundancy matters.</span></span></label>
-                <label className={cx('choice', c.delivery_mode === 'fallback' && 'selected')}><input type="radio" name="mode" checked={c.delivery_mode === 'fallback'} onChange={() => set({ delivery_mode: 'fallback', fallback: { ...c.fallback, primary: c.channels.includes(c.fallback.primary) ? c.fallback.primary : c.channels[0], secondary: c.channels.includes(c.fallback.secondary) && c.fallback.secondary !== c.channels[0] ? c.fallback.secondary : c.channels[1] } })} /><span><span className="strong" style={{ display: 'block' }}>Primary channel with fallback</span><span className="muted small">Each recipient gets <em>one</em> message on the primary channel; the fallback is only used if that fails or isn’t available.</span></span></label>
+                <label className={cx('choice', c.delivery_mode === 'all' && 'selected')}><input type="radio" name="mode" checked={c.delivery_mode === 'all'} onChange={() => set({ delivery_mode: 'all' })} /><span><span className="strong" style={{ display: 'block' }}>Send on every channel</span><span className="muted small">People get the message on <em>each</em> channel they can receive. Good for urgent notices.</span></span></label>
+                <label className={cx('choice', c.delivery_mode === 'fallback' && 'selected')}><input type="radio" name="mode" checked={c.delivery_mode === 'fallback'} onChange={() => set({ delivery_mode: 'fallback', fallback: { ...c.fallback, primary: c.channels.includes(c.fallback.primary) ? c.fallback.primary : c.channels[0], secondary: c.channels.includes(c.fallback.secondary) && c.fallback.secondary !== c.channels[0] ? c.fallback.secondary : c.channels[1] } })} /><span><span className="strong" style={{ display: 'block' }}>Send once, with a backup</span><span className="muted small">People get <em>one</em> message on your first choice. The other channel is only used if that fails or isn’t available.</span></span></label>
               </div>
               {c.delivery_mode === 'fallback' && (
-                <div className="card card-body form-grid" style={{ background: 'var(--bg)' }}>
+                <details className="more"><summary>Backup settings ({CHANNEL_LABEL[c.fallback.primary]} first, then {CHANNEL_LABEL[c.fallback.secondary]} after {c.fallback.delay_minutes} min if it fails)</summary>
+                <div className="card card-body form-grid" style={{ background: 'var(--bg)', marginTop: 10 }}>
                   <Field label="Primary channel"><select className="select" value={c.fallback.primary} onChange={(e) => set({ fallback: { ...c.fallback, primary: e.target.value } })}>{c.channels.map((ch) => <option key={ch} value={ch}>{CHANNEL_LABEL[ch]}</option>)}</select></Field>
                   <Field label="Fallback channel"><select className="select" value={c.fallback.secondary} onChange={(e) => set({ fallback: { ...c.fallback, secondary: e.target.value } })}>{c.channels.filter((ch) => ch !== c.fallback.primary).map((ch) => <option key={ch} value={ch}>{CHANNEL_LABEL[ch]}</option>)}</select></Field>
                   <Field label="Fallback condition"><select className="select" value={c.fallback.condition} onChange={(e) => set({ fallback: { ...c.fallback, condition: e.target.value } })}><option value="failed">Primary message fails</option><option value="not_delivered">Primary fails or has no delivery confirmation</option></select></Field>
                   <Field label="Fallback delay (minutes)" hint="In demo mode each minute is compressed to one second."><input type="number" min="0" max="1440" className="input" value={c.fallback.delay_minutes} onChange={(e) => set({ fallback: { ...c.fallback, delay_minutes: Math.max(0, Number(e.target.value)) } })} /></Field>
                   <Field label="If the primary channel is unavailable for a contact" className="full"><select className="select" value={c.fallback.unavailable} onChange={(e) => set({ fallback: { ...c.fallback, unavailable: e.target.value } })}><option value="use_fallback">Send on the fallback channel immediately</option><option value="skip">Skip the contact</option></select></Field>
-                </div>
+                </div></details>
               )}
             </>}
+            <label className="check"><input type="checkbox" checked={c.category === 'marketing'} onChange={(e) => set({ category: e.target.checked ? 'marketing' : 'operational' })} />This is a promotional or marketing message <span className="faint xs">— only people who agreed to marketing will receive it</span></label>
+            <details className="more"><summary>More options</summary>
+              <div className="stack" style={{ marginTop: 12 }}>
+                <Field label="Campaign name (for your team)" hint="Leave blank and we’ll name it from your message."><input className="input" value={c.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Scheduled Water Maintenance" /></Field>
+                <Field label="Type"><select className="select" value={c.category} onChange={(e) => set({ category: e.target.value })}>{Object.entries(CAMPAIGN_CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
+                <Field label="Internal note (optional)"><input className="input" value={c.description} onChange={(e) => set({ description: e.target.value })} placeholder="Not shown to recipients" /></Field>
+                <label className="check"><input type="checkbox" checked={c.request_ack} onChange={(e) => set({ request_ack: e.target.checked })} />Ask people to confirm they received it (reply YES)</label>
+              </div>
+            </details>
           </>}
 
-          {step === 3 && <>
-            <div className="between wrap"><div><h2 style={{ fontSize: '1.1rem' }}>Compose</h2><p className="muted small">{multi ? 'Write a version for each channel — each can be tailored.' : 'Write your message.'}</p></div>
+          {step === 1 && <>
+            <div className="between wrap"><div><h2 style={{ fontSize: '1.1rem' }}>Write your message</h2><p className="muted small">{multi ? 'Each channel gets its own version so it fits — AI can write all of them from one description.' : 'Write it yourself, or describe it and let AI draft it.'}</p></div>
               <Field label="Preview as"><select className="select input-sm" value={sample?.id || ''} onChange={(e) => setSampleId(e.target.value)}>{plan.recipients.slice(0, 200).map((x) => <option key={x.id} value={x.id}>{fullName(x)}</option>)}</select></Field></div>
+            <div className="ai-review row wrap" style={{ gap: 12, padding: '12px 14px' }}>
+              <div className="grow" style={{ minWidth: 220 }}><div className="strong small">{c.channels.some((ch) => c.content[ch].body) ? 'Want AI to improve or adapt this?' : 'Not sure what to write?'}</div><div className="faint xs">Describe it in a sentence — AI drafts {multi ? 'every channel version' : 'the message'}. You review and edit before anything is sent.</div></div>
+              <AIButton onClick={() => setAiOpen({ brief: '', auto: false })}>{c.channels.some((ch) => c.content[ch].body) ? 'Improve with AI' : 'Write with AI'}</AIButton>
+            </div>
             {multi && <Tabs value={composeTab} onChange={setComposeTab} tabs={c.channels.map((ch) => ({ value: ch, label: <span className="row" style={{ gap: 6 }}><ChannelIcon channel={ch} />{CHANNEL_LABEL[ch]}{(errors[`body_${ch}`] || errors[`subject_${ch}`]) && <span className="err">•</span>}{c.content[ch].body ? <CheckCircle2 size={13} className="ok" /> : null}</span> }))} />}
             <div className="row wrap">
               <select className="select input-sm" style={{ width: 'auto' }} value="" onChange={(e) => { const t = o.templates.find((x) => x.id === e.target.value); if (t) set({ content: { ...c.content, [composeTab]: { ...c.content[composeTab], subject: t.subject || c.content[composeTab].subject, body: t.content } } }); }} aria-label="Load a template"><option value="">Load {CHANNEL_LABEL[composeTab]} template…</option>{o.templates.filter((t) => t.channel === composeTab).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
               {multi && c.channels.filter((ch) => ch !== composeTab && c.content[ch].body).map((ch) => <button key={ch} className="btn btn-sm" onClick={() => set({ content: { ...c.content, [composeTab]: { ...c.content[composeTab], body: c.content[ch].body.replace(/\*\*|_|^# /gm, '') } } })}><Copy />Copy text from {CHANNEL_LABEL[ch]}</button>)}
             </div>
             {c.channels.map((ch) => ch === composeTab && <Composer key={ch} channel={ch} value={c.content[ch]} onChange={(v) => set({ content: { ...c.content, [ch]: v } })} contact={sample} org={o.org} errors={{ body: errors[`body_${ch}`], subject: errors[`subject_${ch}`] }} />)}
-            <label className="check"><input type="checkbox" checked={c.request_ack} onChange={(e) => set({ request_ack: e.target.checked })} />Request acknowledgement — replies of “YES” are recorded as acknowledged</label>
             {c.request_ack && !c.channels.every((ch) => /yes/i.test(c.content[ch].body || '')) && <Callout tone="warn">Tell recipients how to acknowledge, e.g. “Reply YES to confirm.”</Callout>}
           </>}
 
-          {step === 4 && <>
-            <div><h2 style={{ fontSize: '1.1rem' }}>Schedule</h2><p className="muted small">Send immediately, pick a time, or keep it as a draft.</p></div>
-            <div className="grid-3">{[['now', Send, 'Send now', 'Start the simulation as soon as you confirm.'], ['later', CalendarClock, 'Schedule for later', 'Choose a date, time and time zone.'], ['draft', Save, 'Save as draft', 'Come back and finish later.']].map(([k, I, l, d]) => (
-              <label key={k} className={cx('choice', c.schedule.type === k && 'selected')}><input type="radio" name="sched" checked={c.schedule.type === k} onChange={() => set({ schedule: { ...c.schedule, type: k } })} /><span><span className="strong row" style={{ gap: 6 }}><I size={15} />{l}</span><span className="muted small">{d}</span></span></label>))}</div>
-            {c.schedule.type === 'later' && (
-              <div className="form-grid">
-                <Field label="Date & time" error={errors.schedule}><input type="datetime-local" className={cx('input', errors.schedule && 'invalid')} value={c.schedule.at} onChange={(e) => set({ schedule: { ...c.schedule, at: e.target.value } })} /></Field>
-                <Field label="Time zone"><select className="select" value={c.schedule.timezone} onChange={(e) => set({ schedule: { ...c.schedule, timezone: e.target.value } })}>{[...new Set([o.org.timezone, ...TIMEZONES])].map((t) => <option key={t}>{t}</option>)}</select></Field>
-                {c.schedule.at && !errors.schedule && !isNaN(zonedToUtc(c.schedule.at, c.schedule.timezone)) && <p className="faint small full">Sends at {fmtDateTime(zonedToUtc(c.schedule.at, c.schedule.timezone), c.schedule.timezone)} {c.schedule.timezone} · your local time {fmtDateTime(zonedToUtc(c.schedule.at, c.schedule.timezone))}.</p>}
-                {o.org.settings.communication.quiet_hours && c.schedule.at && (() => { const h = Number(c.schedule.at.split('T')[1]?.slice(0, 2)); return h >= 21 || h < 8; })() && <div className="full"><Callout tone="warn">This is within quiet hours (9 PM – 8 AM). Consider a daytime send, especially for SMS.</Callout></div>}
-              </div>
-            )}
-            {c.schedule.type === 'draft' && <Callout>Choosing “Save as draft” and continuing will save without sending. You can also use “Save draft” at any time.</Callout>}
-          </>}
-
-          {step === 5 && <>
-            <div><h2 style={{ fontSize: '1.1rem' }}>Review and confirm</h2><p className="muted small">Check everything before {c.schedule.type === 'later' ? 'scheduling' : 'sending'}.</p></div>
+          {step === 2 && <>
+            <div><h2 style={{ fontSize: '1.1rem' }}>Review & send</h2><p className="muted small">Check the details, choose when to send, and confirm.</p></div>
             <dl className="kv">
-              <dt>Campaign</dt><dd className="strong">{c.name}</dd>
+              <dt>Campaign</dt><dd className="strong">{autoName()}</dd>
               <dt>Category</dt><dd>{CAMPAIGN_CATEGORIES[c.category]}</dd>
               <dt>Audience</dt><dd>{audienceLabel(c, o.lists)} · {plural(plan.recipients.length, 'recipient')}</dd>
               <dt>Channels</dt><dd>{c.channels.map((ch) => CHANNEL_LABEL[ch]).join(' + ')}{multi && (c.delivery_mode === 'fallback' ? ` — ${CHANNEL_LABEL[c.fallback.primary]} first, fallback to ${CHANNEL_LABEL[c.fallback.secondary]} if ${c.fallback.condition === 'failed' ? 'it fails' : 'not delivered'} after ${c.fallback.delay_minutes} min` : ' — all channels')}</dd>
@@ -227,10 +227,26 @@ export default function CampaignBuilder() {
             <Callout icon={FlaskConical}>Demonstration mode: confirming creates real records and simulates delivery. <strong>No real emails, texts or WhatsApp messages are sent.</strong></Callout>
           </>}
 
+          {step === 2 && <>
+            <div className="label" style={{ marginTop: 8 }}>When should it go out?</div>
+            <div className="grid-3">{[['now', Send, 'Send now', 'Start the simulation as soon as you confirm.'], ['later', CalendarClock, 'Schedule for later', 'Choose a date, time and time zone.'], ['draft', Save, 'Save as draft', 'Come back and finish later.']].map(([k, I, l, d]) => (
+              <label key={k} className={cx('choice', c.schedule.type === k && 'selected')}><input type="radio" name="sched" checked={c.schedule.type === k} onChange={() => set({ schedule: { ...c.schedule, type: k } })} /><span><span className="strong row" style={{ gap: 6 }}><I size={15} />{l}</span><span className="muted small">{d}</span></span></label>))}</div>
+            {c.schedule.type === 'later' && (
+              <div className="form-grid">
+                <Field label="Date & time" error={errors.schedule}><input type="datetime-local" className={cx('input', errors.schedule && 'invalid')} value={c.schedule.at} onChange={(e) => set({ schedule: { ...c.schedule, at: e.target.value } })} /></Field>
+                <Field label="Time zone"><select className="select" value={c.schedule.timezone} onChange={(e) => set({ schedule: { ...c.schedule, timezone: e.target.value } })}>{[...new Set([o.org.timezone, ...TIMEZONES])].map((t) => <option key={t}>{t}</option>)}</select></Field>
+                {c.schedule.at && !errors.schedule && !isNaN(zonedToUtc(c.schedule.at, c.schedule.timezone)) && <p className="faint small full">Sends at {fmtDateTime(zonedToUtc(c.schedule.at, c.schedule.timezone), c.schedule.timezone)} {c.schedule.timezone} · your local time {fmtDateTime(zonedToUtc(c.schedule.at, c.schedule.timezone))}.</p>}
+                {o.org.settings.communication.quiet_hours && c.schedule.at && (() => { const h = Number(c.schedule.at.split('T')[1]?.slice(0, 2)); return h >= 21 || h < 8; })() && <div className="full"><Callout tone="warn">This is within quiet hours (9 PM – 8 AM). Consider a daytime send, especially for SMS.</Callout></div>}
+              </div>
+            )}
+            
+          </>}
+
           <div className="between" style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
             {step > 0 ? <button className="btn btn-ghost" onClick={() => setStep(step - 1)}><ArrowLeft />Back</button> : <span />}
-            {step < 5 ? <button className="btn btn-primary" onClick={() => { if (step === 4 && c.schedule.type === 'draft') return saveDraft(); go(step + 1); }}>{step === 4 && c.schedule.type === 'draft' ? 'Save draft' : 'Continue'}<ArrowRight /></button>
-              : <button className="btn btn-primary btn-lg" disabled={!plan.sends.length} onClick={() => [0, 1, 2, 3, 4].every(validate) ? setConfirming(true) : toast.error('Some steps need attention.')}>{c.schedule.type === 'later' ? <><CalendarClock />Schedule campaign</> : <><Send />Send campaign</>}</button>}
+            {step < 2 ? <button className="btn btn-primary" onClick={() => go(step + 1)}>Continue<ArrowRight /></button>
+              : c.schedule.type === 'draft' ? <button className="btn btn-primary btn-lg" onClick={saveDraft}><Save />Save draft</button>
+                : <button className="btn btn-primary btn-lg" disabled={!plan.sends.length} onClick={() => [0, 1, 2].every(validate) ? setConfirming(true) : toast.error('Some steps need attention.')}>{c.schedule.type === 'later' ? <><CalendarClock />Schedule campaign</> : <><Send />Send campaign</>}</button>}
           </div>
         </div>
 
@@ -256,6 +272,8 @@ export default function CampaignBuilder() {
       </div>
       <style>{`@media (max-width: 1100px){ .builder-grid{ grid-template-columns: 1fr !important; } .builder-grid aside{ position: static !important; } }`}</style>
 
+      {aiOpen && <WriteWithAI channels={c.channels.length ? c.channels : ['email']} current={c.content} initialBrief={aiOpen.brief} autoGenerate={aiOpen.auto} contact={sample} onClose={() => setAiOpen(null)}
+        onAccept={(v) => { setC((x) => ({ ...x, content: Object.fromEntries(Object.entries({ ...x.content }).map(([ch, cur]) => [ch, v[ch] ? { ...cur, ...v[ch] } : cur])) })); setErrors({}); toast.success('Draft added to your campaign. Review it, then continue.'); }} />}
       {confirming && (
         <Modal title={c.schedule.type === 'later' ? 'Schedule this campaign?' : 'Send this campaign now?'} onClose={() => !busy && setConfirming(false)} footer={<><button className="btn" disabled={busy} onClick={() => setConfirming(false)}>Go back</button><button className="btn btn-primary" disabled={busy} onClick={launch}>{busy ? 'Starting…' : c.schedule.type === 'later' ? 'Confirm schedule' : 'Confirm & send'}</button></>}>
           <div className="stack">
@@ -281,9 +299,8 @@ function AudienceStep({ c, set, plan, errors }) {
   Object.values(plan.perChannel).forEach((pc) => Object.entries(pc.reasons).forEach(([r, n]) => (reasons[r] = Math.max(reasons[r] || 0, n))));
   return (
     <>
-      <div><h2 style={{ fontSize: '1.1rem' }}>Select audience</h2><p className="muted small">Who should receive this campaign?</p></div>
       {errors.audience && <Callout tone="err">{errors.audience}</Callout>}
-      <div className="grid-4">{[['all', 'All contacts'], ['list', 'Lists'], ['segment', 'Segments'], ['contacts', 'Pick contacts']].map(([k, l]) => <label key={k} className={cx('choice', c.audience.type === k && 'selected')}><input type="radio" name="aud" checked={c.audience.type === k} onChange={() => typeChange(k)} /><span className="small strong">{l}</span></label>)}</div>
+      <div className="grid-4">{[['all', 'Everyone'], ['list', 'Groups'], ['segment', 'Smart groups'], ['contacts', 'Choose people']].map(([k, l]) => <label key={k} className={cx('choice', c.audience.type === k && 'selected')}><input type="radio" name="aud" checked={c.audience.type === k} onChange={() => typeChange(k)} /><span className="small strong">{l}</span></label>)}</div>
       {(c.audience.type === 'list' || c.audience.type === 'segment') && (
         <div className="card" style={{ background: 'var(--bg)' }}>{(c.audience.type === 'list' ? statics : segs).map((l) => (
           <label key={l.id} className="between" style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}><span className="check"><input type="checkbox" checked={c.audience.ids.includes(l.id)} onChange={() => toggleId(l.id)} />{l.name}</span><span className="faint small">{listMembers(s, l, o.contacts).length} contacts</span></label>))}
@@ -300,8 +317,8 @@ function AudienceStep({ c, set, plan, errors }) {
         </div>
       )}
       <div className="card card-body" style={{ background: 'var(--bg)' }}>
-        <div className="between"><span className="strong">{plural(plan.recipients.length, 'recipient')}</span><Badge tone="accent">{c.category === 'marketing' ? 'Marketing consent rules' : 'Operational consent rules'}</Badge></div>
-        <div className="table-wrap" style={{ marginTop: 10 }}><table className="table"><thead><tr><th>Channel</th><th>Eligible</th><th>Not eligible</th><th>Why</th></tr></thead><tbody>
+        <div className="between"><span className="strong">{plural(plan.recipients.length, 'recipient')}</span><Badge tone="accent">{c.category === 'marketing' ? 'Marketing message' : 'Service / operational message'}</Badge></div>
+        <div className="table-wrap" style={{ marginTop: 10 }}><table className="table"><thead><tr><th>Channel</th><th>Can receive</th><th>Can’t</th><th>Why not</th></tr></thead><tbody>
           {['email', 'sms', 'whatsapp'].map((ch) => { const pc = plan.perChannel[ch]; return <tr key={ch}><td><span className="row"><ChannelIcon channel={ch} />{CHANNEL_LABEL[ch]}</span></td><td className="strong ok">{pc.eligible}</td><td className={pc.ineligible ? 'warn' : 'faint'}>{pc.ineligible}</td><td className="muted small">{Object.entries(pc.reasons).map(([r, n]) => `${n} ${REASON_LABEL[r].toLowerCase()}`).join(' · ') || '—'}</td></tr>; })}
         </tbody></table></div>
         {plan.recipients.length > 0 && <p className="faint xs" style={{ marginTop: 8 }}><AlertTriangle size={12} style={{ verticalAlign: -2 }} /> Contacts are never messaged without the consent your rules require.</p>}

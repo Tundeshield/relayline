@@ -12,6 +12,7 @@ import { resetDemoWorkspace } from '../../data/seed';
 import { fullName, fmtDate, fmtMoney, cx, toCSV, download, DAY } from '../../lib/util';
 import { usePerm, useTitle } from '../../lib/hooks';
 import { setTextSize } from '../../components/AppShell';
+import Team from './Team';
 
 const TABS = [['general', 'General', Building2], ['channels', 'Channels', Radio], ['communication', 'Communication', MessagesSquare], ['consent', 'Consent', ShieldCheck], ['team', 'Team', Users], ['billing', 'Billing', CreditCard], ['security', 'Security', Lock], ['profile', 'Your profile', User]];
 
@@ -36,12 +37,12 @@ export default function Settings() {
         <nav className="card" style={{ padding: 8 }} aria-label="Settings sections">{TABS.map(([k, l, I]) => <button key={k} className={cx('nav-link', tab === k && 'active')} style={{ width: '100%', border: 0, background: tab === k ? undefined : 'none', cursor: 'pointer' }} onClick={() => nav(`/app/settings/${k}`)}><I /><span>{l}</span></button>)}</nav>
         <div>
           {!editable && !['profile', 'security', 'team'].includes(tab) && <div style={{ marginBottom: 16 }}><Callout>You can view these settings. Only Owners and Admins can change them.</Callout></div>}
-          <fieldset disabled={!editable && !['profile', 'security'].includes(tab)} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+          <fieldset disabled={!editable && !['profile', 'security', 'team'].includes(tab)} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
             {tab === 'general' && <General />}
             {tab === 'channels' && <Channels />}
             {tab === 'communication' && <Communication />}
             {tab === 'consent' && <Consent />}
-            {tab === 'team' && <TeamTab />}
+            {tab === 'team' && <Team embedded />}
             {tab === 'billing' && <Billing />}
             {tab === 'security' && <Security />}
             {tab === 'profile' && <Profile />}

@@ -31,8 +31,8 @@ export const CONDITIONS = [
 ];
 
 export const ACTIONS = [
-  { type: 'send_email', group: 'Messaging', label: 'Send email', channel: 'email', fields: [{ key: 'templateId', label: 'Template (optional)', type: 'template', channel: 'email' }, { key: 'subject', label: 'Subject', type: 'text' }, { key: 'body', label: 'Message', type: 'textarea' }, { key: 'purpose', label: 'Purpose', type: 'purpose' }] },
-  { type: 'send_sms', group: 'Messaging', label: 'Send SMS', channel: 'sms', fields: [{ key: 'templateId', label: 'Template (optional)', type: 'template', channel: 'sms' }, { key: 'body', label: 'Message', type: 'textarea' }, { key: 'purpose', label: 'Purpose', type: 'purpose' }] },
+  { type: 'send_email', group: 'Messaging', label: 'Send email', channel: 'email', fields: [{ key: 'reuse_original', label: 'Reuse the content of the message that triggered this', type: 'checkbox' }, { key: 'templateId', label: 'Template (optional)', type: 'template', channel: 'email' }, { key: 'subject', label: 'Subject', type: 'text' }, { key: 'body', label: 'Message', type: 'textarea' }, { key: 'purpose', label: 'Purpose', type: 'purpose' }] },
+  { type: 'send_sms', group: 'Messaging', label: 'Send SMS', channel: 'sms', fields: [{ key: 'reuse_original', label: 'Reuse the content of the message that triggered this', type: 'checkbox' }, { key: 'templateId', label: 'Template (optional)', type: 'template', channel: 'sms' }, { key: 'body', label: 'Message', type: 'textarea' }, { key: 'purpose', label: 'Purpose', type: 'purpose' }] },
   { type: 'send_whatsapp', group: 'Messaging', label: 'Send WhatsApp message', channel: 'whatsapp', fields: [{ key: 'templateId', label: 'Template (optional)', type: 'template', channel: 'whatsapp' }, { key: 'body', label: 'Message', type: 'textarea' }, { key: 'purpose', label: 'Purpose', type: 'purpose' }] },
   { type: 'send_alternative', group: 'Messaging', label: 'Send via alternative channel', fields: [{ key: 'body', label: 'Message (blank = reuse original)', type: 'textarea' }] },
   { type: 'add_to_list', group: 'Contact', label: 'Add to list', fields: [{ key: 'listId', label: 'List', type: 'staticlist', required: true }] },
@@ -62,7 +62,8 @@ export function validateNode(kind, node) {
     const v = node.config?.[f.key];
     if (f.required && (v === undefined || v === null || v === '')) errs.push(`${f.label} is required`);
   });
-  if (kind === 'action' && item.channel && !node.config?.templateId && !node.config?.body) errs.push('Message or template is required');
+  if (kind === 'action' && item.channel && !node.config?.templateId && !node.config?.body && !node.config?.reuse_original) errs.push('Message or template is required');
+  if (kind === 'action' && item.channel && /\[[^\]]+\]/.test(`${node.config?.subject || ''} ${node.config?.body || ''}`)) errs.push('Replace the [bracketed] placeholders in the message');
   return errs;
 }
 

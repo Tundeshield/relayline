@@ -1,4 +1,8 @@
 import { useState } from 'react';
+import { Sparkles } from 'lucide-react';
+import { AIButton, Thinking } from '../../components/ai';
+import { askWorkspace } from '../../services/ai';
+import { getState } from '../../data/store';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { History, Workflow } from 'lucide-react';
 import { useOrg } from '../../data/store';
@@ -7,6 +11,21 @@ import { ExecutionLog } from './AutomationBuilder';
 import { fullName, fmtDateTime, relTime, plural } from '../../lib/util';
 import { MESSAGE_STATUS, AUTOMATION_STATUS } from '../../lib/constants';
 import { useTitle } from '../../lib/hooks';
+
+export function ExplainFailure({ automationId }) {
+  const o = useOrg();
+  const [res, setRes] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const go = async () => { setBusy(true); try { setRes(await askWorkspace('Explain why this workflow failed', `/app/automations/${automationId}`, { ...o, users: getState().users })); } finally { setBusy(false); } };
+  return (
+    <div className="ai-review" style={{ marginBottom: 16 }}>
+      <div className="between wrap"><span className="row strong"><Sparkles size={16} className="accent" />Something not working?</span><AIButton className="btn-sm" onClick={go} disabled={busy}>Explain with AI</AIButton></div>
+      {busy && <div style={{ marginTop: 8 }}><Thinking label="Reading the execution history…" /></div>}
+      {res && <div className="small" style={{ whiteSpace: 'pre-wrap', marginTop: 10 }}>{res.text}{res.items?.length > 0 && <div className="row wrap" style={{ gap: 6, marginTop: 8 }}>{res.items.map((it) => <Link key={it.to} className="chip" to={it.to}>{it.label}</Link>)}</div>}</div>}
+      {!res && !busy && <p className="faint xs" style={{ marginTop: 4 }}>AI reads this automation’s runs and messages and explains failures in plain words. It only uses data in your workspace.</p>}
+    </div>
+  );
+}
 
 const tone = (s) => (s === 'completed' ? 'ok' : s === 'failed' ? 'err' : s === 'waiting' ? 'warn' : 'neutral');
 
@@ -24,7 +43,8 @@ export function AutomationHistory() {
   const live = o.executions.filter((e) => e.automation_id === id && !e.test);
   return (
     <>
-      <PageHead crumbs={[{ label: 'Automations', to: '/app/automations' }, { label: a.name, to: `/app/automations/${a.id}` }, { label: 'History' }]} title={<span className="row-3">Execution history <StatusBadge map={AUTOMATION_STATUS} status={a.status} /></span>} description={`${plural(live.length, 'live execution')} · ${plural(live.filter((e) => e.status === 'failed').length, 'failure')} · ${plural(o.executions.filter((e) => e.automation_id === id && e.test).length, 'test run')}`} actions={<Link className="btn" to={`/app/automations/${a.id}`}><Workflow />Edit workflow</Link>} />
+      <PageHead crumbs={[{ label: 'Automations', to: '/app/automations' }, { label: a.name, to: `/app/automations/${a.id}` }, { label: 'Run history' }]} title={<span className="row-3">Run history <StatusBadge map={AUTOMATION_STATUS} status={a.status} /></span>} description={`${plural(live.length, 'live execution')} · ${plural(live.filter((e) => e.status === 'failed').length, 'failure')} · ${plural(o.executions.filter((e) => e.automation_id === id && e.test).length, 'test run')}`} actions={<Link className="btn" to={`/app/automations/${a.id}`}><Workflow />Edit workflow</Link>} />
+      <ExplainFailure automationId={a.id} />
       <div className="card">
         <div className="toolbar"><Segmented value={kind} onChange={setKind} options={[['all', 'All'], ['live', 'Live'], ['test', 'Tests']]} label="Type" />
           <select className="select input-sm" style={{ width: 'auto' }} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status"><option value="">Any status</option><option value="completed">Completed</option><option value="waiting">Waiting</option><option value="failed">Failed</option></select></div>

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { X, Check, AlertTriangle, Info, AlertCircle, Mail, MessageSquare, MessageCircle, ChevronUp, ChevronDown, Inbox as InboxIcon } from 'lucide-react';
 import { cx, initials } from '../lib/util';
 import { CHANNEL_LABEL } from '../lib/constants';
@@ -145,8 +145,9 @@ export function Callout({ tone = 'info', icon, children }) {
   const I = icon || (tone === 'warn' ? AlertTriangle : tone === 'err' ? AlertCircle : Info);
   return <div className={`callout callout-${tone}`}><I /><div className="grow">{children}</div></div>;
 }
-export function PageHead({ title, description, actions, crumbs }) {
+export function PageHead({ title, description, actions, crumbs, tabs }) {
   return (
+    <>
     <div className="page-head">
       <div className="grow">
         {crumbs && <div className="crumbs">{crumbs.map((c, i) => <span key={i} className="row" style={{ gap: 6 }}>{i > 0 && <span>/</span>}{c.to ? <Link to={c.to}>{c.label}</Link> : <span>{c.label}</span>}</span>)}</div>}
@@ -155,6 +156,8 @@ export function PageHead({ title, description, actions, crumbs }) {
       </div>
       {actions && <div className="row wrap">{actions}</div>}
     </div>
+    {tabs && <SectionTabs tabs={tabs} />}
+    </>
   );
 }
 export function Tabs({ tabs, value, onChange }) {
@@ -199,3 +202,11 @@ export function useSort(rows, initial, getters = {}) {
   );
   return { sorted, Th, sort };
 }
+
+// Secondary navigation between closely related pages (keeps the sidebar short).
+export function SectionTabs({ tabs }) {
+  return <nav className="section-tabs" aria-label="Section">{tabs.map(([to, label]) => <NavLink key={to} to={to} end className={({ isActive }) => (isActive ? 'active' : '')}>{label}</NavLink>)}</nav>;
+}
+export const CAMPAIGN_TABS = [['/app/campaigns', 'Campaigns'], ['/app/templates', 'Templates']];
+export const CONTACT_TABS = [['/app/contacts', 'All contacts'], ['/app/lists', 'Groups'], ['/app/contacts/import', 'Import']];
+export const REPORT_TABS = [['/app/analytics', 'Performance'], ['/app/activity', 'Activity log']];
