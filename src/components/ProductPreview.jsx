@@ -27,7 +27,7 @@ export default function ProductPreview() {
           </div>
           <div className="card" style={{ padding: 14 }}>
             <div className="strong" style={{ fontSize: 12.5, marginBottom: 10 }}>Inbox</div>
-            {[[MessageSquare, 'Maria G.', 'Will the water be restored by 3 PM?', '#e0964d'], [Mail, 'Sofia R.', 'Is the laundry room affected too?', '#7fa3f0'], [MessageCircle, 'Olivia P.', 'Can the freight elevator be reserved?', '#3cc3ae']].map(([I, n, t, c]) => (
+            {[[MessageSquare, 'Maria G.', 'Will the water be restored by 3 PM?', '#9a560f'], [Mail, 'Sofia R.', 'Is the laundry room affected too?', '#2f5fc4'], [MessageCircle, 'Olivia P.', 'Can the freight elevator be reserved?', '#127a6b']].map(([I, n, t, c]) => (
               <div key={n} className="row" style={{ padding: '7px 0', borderBottom: '1px solid var(--border)', alignItems: 'flex-start' }}><I size={14} color={c} style={{ marginTop: 3 }} /><div className="grow" style={{ minWidth: 0 }}><div className="strong xs">{n}</div><div className="faint xs truncate">{t}</div></div></div>
             ))}
           </div>

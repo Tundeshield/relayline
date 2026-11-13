@@ -2,7 +2,7 @@
 import { useState, useRef } from 'react';
 import { fmtNum } from '../lib/util';
 
-export const SERIES_COLORS = { email: '#4f7fe8', sms: '#c7741f', whatsapp: '#1a9e8b', all: '#6fb3cc', delivered: '#1a9e8b', failed: '#e66767', replied: '#4f7fe8' };
+export const SERIES_COLORS = { email: '#4f7fe8', sms: '#c7741f', whatsapp: '#1a9e8b', all: '#124e66', delivered: '#1a9e8b', failed: '#d9534f', replied: '#4f7fe8' };
 
 function niceMax(v) {
   if (v <= 4) return 4;
